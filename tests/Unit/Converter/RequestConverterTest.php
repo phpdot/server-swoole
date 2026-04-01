@@ -413,4 +413,80 @@ final class RequestConverterTest extends TestCase
 
         self::assertNull($request->getParsedBody());
     }
+
+    #[Test]
+    public function schemeIgnoresXForwardedProto(): void
+    {
+        $request = $this->converter->assembleRequest(
+            headers: ['x-forwarded-proto' => 'https'],
+            server: ['request_method' => 'get', 'request_uri' => '/'],
+            cookies: [],
+            query: [],
+            post: null,
+            files: [],
+            body: '',
+        );
+
+        self::assertSame('http', $request->getUri()->getScheme());
+    }
+
+    #[Test]
+    public function fallbackHostIncludesNonStandardPort(): void
+    {
+        $request = $this->converter->assembleRequest(
+            headers: [],
+            server: ['request_method' => 'get', 'request_uri' => '/', 'server_addr' => '10.0.0.1', 'server_port' => '8080'],
+            cookies: [],
+            query: [],
+            post: null,
+            files: [],
+            body: '',
+        );
+
+        self::assertSame('10.0.0.1', $request->getUri()->getHost());
+        self::assertSame(8080, $request->getUri()->getPort());
+    }
+
+    #[Test]
+    public function fallbackHostExcludesStandardPort(): void
+    {
+        $request = $this->converter->assembleRequest(
+            headers: [],
+            server: ['request_method' => 'get', 'request_uri' => '/', 'server_addr' => '10.0.0.1', 'server_port' => '80'],
+            cookies: [],
+            query: [],
+            post: null,
+            files: [],
+            body: '',
+        );
+
+        self::assertSame('10.0.0.1', $request->getUri()->getHost());
+        self::assertNull($request->getUri()->getPort());
+    }
+
+    #[Test]
+    public function uploadErrorDoesNotCrash(): void
+    {
+        $request = $this->converter->assembleRequest(
+            headers: [],
+            server: ['request_method' => 'post', 'request_uri' => '/upload'],
+            cookies: [],
+            query: [],
+            post: null,
+            files: [
+                'avatar' => [
+                    'tmp_name' => '',
+                    'size' => 0,
+                    'error' => UPLOAD_ERR_NO_FILE,
+                    'name' => '',
+                    'type' => '',
+                ],
+            ],
+            body: '',
+        );
+
+        $uploadedFiles = $request->getUploadedFiles();
+        self::assertArrayHasKey('avatar', $uploadedFiles);
+        self::assertSame(UPLOAD_ERR_NO_FILE, $uploadedFiles['avatar']->getError());
+    }
 }

@@ -42,12 +42,23 @@ final class ResponseConverter
     {
         $swooleResponse->status($psrResponse->getStatusCode(), $psrResponse->getReasonPhrase());
 
+        $trailerNames = [];
+        if ($psrResponse->hasHeader('Trailer')) {
+            $trailerNames = array_map(
+                static fn(string $name): string => strtolower(trim($name)),
+                explode(',', $psrResponse->getHeaderLine('Trailer')),
+            );
+        }
+
         foreach ($psrResponse->getHeaders() as $name => $values) {
             $lower = strtolower($name);
             if ($lower === 'set-cookie') {
                 continue;
             }
             if ($lower === 'transfer-encoding') {
+                continue;
+            }
+            if (in_array($lower, $trailerNames, true)) {
                 continue;
             }
             $swooleResponse->header($name, implode(', ', $values));
@@ -154,7 +165,7 @@ final class ResponseConverter
         $cookieHeaders = $psrResponse->getHeader('Set-Cookie');
         foreach ($cookieHeaders as $cookieHeader) {
             $parsed = $this->parseCookieHeader($cookieHeader);
-            $swooleResponse->cookie(
+            $swooleResponse->rawcookie(
                 $parsed['name'],
                 $parsed['value'],
                 $parsed['expires'],
