@@ -1,0 +1,11 @@
+includes:
+    - vendor/phpstan/phpstan-strict-rules/rules.neon
+
+parameters:
+    level: 10
+    paths:
+        - src
+    scanFiles:
+        - vendor/swoole/ide-helper/src/swoole/Swoole/Http/Request.php
+        - vendor/swoole/ide-helper/src/swoole/Swoole/Http/Response.php
+        - vendor/swoole/ide-helper/src/swoole/Swoole/Http/Server.php
