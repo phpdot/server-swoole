@@ -120,15 +120,19 @@ final class RequestConverter
      */
     private function buildUri(array $headers, array $server): UriInterface
     {
-        if (isset($server['https']) && $server['https'] === 'on') {
-            $scheme = 'https';
-        } elseif (isset($headers['x-forwarded-proto'])) {
-            $scheme = $headers['x-forwarded-proto'];
-        } else {
-            $scheme = 'http';
-        }
+        $scheme = (isset($server['https']) && $server['https'] === 'on') ? 'https' : 'http';
 
-        $host = $headers['host'] ?? $server['server_addr'] ?? 'localhost';
+        if (isset($headers['host'])) {
+            $host = $headers['host'];
+        } else {
+            $addr = $server['server_addr'] ?? 'localhost';
+            $port = $server['server_port'] ?? '';
+            if ($port !== '' && $port !== '80' && $port !== '443') {
+                $host = $addr . ':' . $port;
+            } else {
+                $host = $addr;
+            }
+        }
         $path = explode('?', $server['request_uri'] ?? '/')[0];
         $queryString = $server['query_string'] ?? '';
 
@@ -238,7 +242,12 @@ final class RequestConverter
         /** @var string $type */
         $type = $file['type'] ?? '';
 
-        $stream = $this->streamFactory->createStreamFromFile($tmpName);
+        if ($error !== UPLOAD_ERR_OK || $tmpName === '') {
+            $stream = $this->streamFactory->createStream('');
+        } else {
+            $stream = $this->streamFactory->createStreamFromFile($tmpName);
+        }
+
         return $this->uploadedFileFactory->createUploadedFile(
             $stream,
             $size,
