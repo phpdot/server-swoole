@@ -15,7 +15,7 @@ use Psr\Http\Server\RequestHandlerInterface;
 use Swoole\Http\Request as SwooleRequest;
 use Swoole\Http\Response as SwooleResponse;
 use Swoole\Http\Server;
-use Throwable;
+
 
 /**
  * SwooleServer.
@@ -106,14 +106,9 @@ final class SwooleServer
         }
 
         $server->on('request', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) use ($handler): void {
-            try {
-                $psrRequest = $this->requestConverter->toServerRequest($swooleRequest);
-                $psrResponse = $handler->handle($psrRequest);
-                $this->responseConverter->toSwoole($psrResponse, $swooleResponse);
-            } catch (Throwable) {
-                $swooleResponse->status(500);
-                $swooleResponse->end('Internal Server Error');
-            }
+            $psrRequest = $this->requestConverter->toServerRequest($swooleRequest);
+            $psrResponse = $handler->handle($psrRequest);
+            $this->responseConverter->toSwoole($psrResponse, $swooleResponse);
         });
 
         $server->start();
