@@ -30,8 +30,8 @@ final class ServerConfig
     /** @var int Maximum coroutines per worker */
     private int $maxCoroutine = 100000;
 
-    /** @var int Server mode (SWOOLE_PROCESS = 3, SWOOLE_BASE = 1) */
-    private int $mode = 3;
+    /** @var int Server mode (SWOOLE_PROCESS = 2, SWOOLE_BASE = 1) */
+    private int $mode = SWOOLE_BASE;
 
     /** @var bool Run as daemon */
     private bool $daemonize = false;
