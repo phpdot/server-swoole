@@ -14,6 +14,7 @@ use Psr\Http\Message\UriFactoryInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 use Swoole\Http\Request as SwooleRequest;
 use Swoole\Http\Response as SwooleResponse;
+use Swoole\Coroutine;
 use Swoole\Http\Server;
 use Throwable;
 
@@ -108,6 +109,7 @@ final class SwooleServer
         $server->on('request', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) use ($handler): void {
             try {
                 $psrRequest = $this->requestConverter->toServerRequest($swooleRequest);
+                Coroutine::getContext()[ServerRequestInterface::class] = $psrRequest;
                 $psrResponse = $handler->handle($psrRequest);
                 $this->responseConverter->toSwoole($psrResponse, $swooleResponse);
             } catch (Throwable) {
