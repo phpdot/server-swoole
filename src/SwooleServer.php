@@ -59,16 +59,6 @@ final class SwooleServer
     }
 
     /**
-     * Create a SwooleServer with the default PSR-17 factories.
-     */
-    public static function create(): self
-    {
-        $factory = new \Nyholm\Psr7\Factory\Psr17Factory();
-
-        return new self($factory, $factory, $factory, $factory);
-    }
-
-    /**
      * Create a SwooleServer from a single PSR-17 factory that implements all four interfaces.
      *
      * @param ServerRequestFactoryInterface&UriFactoryInterface&StreamFactoryInterface&UploadedFileFactoryInterface $factory Combined PSR-17 factory
