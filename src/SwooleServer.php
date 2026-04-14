@@ -685,6 +685,16 @@ final class SwooleServer
     }
 
     /**
+     * Convert a Swoole request to a PSR-7 server request.
+     *
+     * @param \Swoole\Http\Request $swooleRequest The Swoole request to convert
+     */
+    public function convertRequest(\Swoole\Http\Request $swooleRequest): \Psr\Http\Message\ServerRequestInterface
+    {
+        return $this->requestConverter->toServerRequest($swooleRequest);
+    }
+
+    /**
      * Create the appropriate Swoole server instance.
      */
     private function createServer(string $host, int $port): Server
