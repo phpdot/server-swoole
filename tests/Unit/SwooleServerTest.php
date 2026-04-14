@@ -40,14 +40,11 @@ final class SwooleServerTest extends TestCase
         self::assertInstanceOf(SwooleServer::class, $server);
     }
 
-    // ── Callback registration ────────────────────────────────────────
-
     #[Test]
     public function onStartAcceptsCallback(): void
     {
         $this->server->onStart(static function (): void {});
 
-        // No exception = success. Callback stored internally.
         self::assertTrue(true);
     }
 
@@ -210,11 +207,21 @@ final class SwooleServerTest extends TestCase
         $this->server->onWorkerStart(static function (): void {});
         $this->server->onWorkerStart(static function (): void {});
 
-        // No exception = all stored. They stack, not replace.
         self::assertTrue(true);
     }
 
-    // ── getServer before serve ───────────────────────────────────────
+    #[Test]
+    public function onHandshakeReplacesInsteadOfAppending(): void
+    {
+        $this->server->onHandshake(static function (): bool {
+            return false;
+        });
+        $this->server->onHandshake(static function (): bool {
+            return true;
+        });
+
+        self::assertTrue(true);
+    }
 
     #[Test]
     public function getServerThrowsBeforeServe(): void
@@ -224,8 +231,6 @@ final class SwooleServerTest extends TestCase
 
         $this->server->getServer();
     }
-
-    // ── Active methods throw before serve ────────────────────────────
 
     #[Test]
     public function pushThrowsBeforeServe(): void

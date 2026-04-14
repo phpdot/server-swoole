@@ -42,8 +42,6 @@ final class SwooleServer
     /** @var Server|null The running Swoole server instance */
     private Server|null $server = null;
 
-    // ── Lifecycle callbacks ──────────────────────────────────────────
-
     /** @var list<Closure> */
     private array $onStartCallbacks = [];
 
@@ -77,15 +75,11 @@ final class SwooleServer
     /** @var list<Closure> */
     private array $onAfterReloadCallbacks = [];
 
-    // ── Connection callbacks ─────────────────────────────────────────
-
     /** @var list<Closure> */
     private array $onConnectCallbacks = [];
 
     /** @var list<Closure> */
     private array $onCloseCallbacks = [];
-
-    // ── Task callbacks ───────────────────────────────────────────────
 
     /** @var list<Closure> */
     private array $onTaskCallbacks = [];
@@ -93,12 +87,8 @@ final class SwooleServer
     /** @var list<Closure> */
     private array $onFinishCallbacks = [];
 
-    // ── IPC callbacks ────────────────────────────────────────────────
-
     /** @var list<Closure> */
     private array $onPipeMessageCallbacks = [];
-
-    // ── WebSocket callbacks ──────────────────────────────────────────
 
     /** @var list<Closure> */
     private array $onOpenCallbacks = [];
@@ -131,8 +121,6 @@ final class SwooleServer
         $this->responseConverter = new ResponseConverter();
     }
 
-    // ── Lifecycle ────────────────────────────────────────────────────
-
     /**
      * Start the Swoole server and begin handling requests.
      *
@@ -142,12 +130,19 @@ final class SwooleServer
      * @param RequestHandlerInterface $handler PSR-15 request handler
      * @param string $host Host address to bind to
      * @param int $port Port number to listen on
+     * @throws ServerException If WebSocket callbacks are registered without onMessage
      */
     public function serve(
         RequestHandlerInterface $handler,
         string $host = '0.0.0.0',
         int $port = 8080,
     ): void {
+        if ($this->hasWebSocket() && $this->onMessageCallbacks === []) {
+            throw new ServerException(
+                'WebSocket callbacks registered but onMessage is missing. Swoole requires onMessage for WebSocket servers.',
+            );
+        }
+
         $server = $this->createServer($host, $port);
         $server->set($this->config->toArray());
 
@@ -200,8 +195,6 @@ final class SwooleServer
     {
         return $this->getServer()->stop($workerId, $waitEvent);
     }
-
-    // ── Event registration (lifecycle) ───────────────────────────────
 
     /**
      * Register a callback for the master process start event.
@@ -313,8 +306,6 @@ final class SwooleServer
         $this->onAfterReloadCallbacks[] = $callback;
     }
 
-    // ── Event registration (connection) ──────────────────────────────
-
     /**
      * Register a callback for new TCP connections.
      *
@@ -334,8 +325,6 @@ final class SwooleServer
     {
         $this->onCloseCallbacks[] = $callback;
     }
-
-    // ── Event registration (task) ────────────────────────────────────
 
     /**
      * Register a callback for task dispatch to a task worker.
@@ -357,8 +346,6 @@ final class SwooleServer
         $this->onFinishCallbacks[] = $callback;
     }
 
-    // ── Event registration (IPC) ─────────────────────────────────────
-
     /**
      * Register a callback for inter-worker pipe messages.
      *
@@ -368,8 +355,6 @@ final class SwooleServer
     {
         $this->onPipeMessageCallbacks[] = $callback;
     }
-
-    // ── Event registration (WebSocket) ───────────────────────────────
 
     /**
      * Register a callback for WebSocket connection open.
@@ -394,11 +379,15 @@ final class SwooleServer
     /**
      * Register a callback for WebSocket handshake (overrides default).
      *
+     * Only one handshake callback is supported — subsequent calls replace
+     * the previous callback. The callback must return bool: true to accept
+     * the connection, false to reject.
+     *
      * Signature: function(Request $request, Response $response): bool
      */
     public function onHandshake(Closure $callback): void
     {
-        $this->onHandshakeCallbacks[] = $callback;
+        $this->onHandshakeCallbacks = [$callback];
     }
 
     /**
@@ -410,8 +399,6 @@ final class SwooleServer
     {
         $this->onDisconnectCallbacks[] = $callback;
     }
-
-    // ── Active methods (WebSocket) ───────────────────────────────────
 
     /**
      * Push data to a WebSocket client.
@@ -469,8 +456,6 @@ final class SwooleServer
         return $server->isEstablished($fd);
     }
 
-    // ── Active methods (task) ────────────────────────────────────────
-
     /**
      * Dispatch a task to a task worker.
      *
@@ -509,10 +494,11 @@ final class SwooleServer
         return $this->getServer()->finish($data);
     }
 
-    // ── Active methods (timer) ───────────────────────────────────────
-
     /**
      * Set a recurring timer.
+     *
+     * Timers are process-global (Swoole\Timer), not scoped to this server.
+     * They persist until cleared or the process exits.
      *
      * @param int $ms Interval in milliseconds
      * @param Closure $callback Timer callback
@@ -525,6 +511,8 @@ final class SwooleServer
 
     /**
      * Set a one-time timer.
+     *
+     * Timers are process-global (Swoole\Timer), not scoped to this server.
      *
      * @param int $ms Delay in milliseconds
      * @param Closure $callback Timer callback
@@ -544,8 +532,6 @@ final class SwooleServer
     {
         return Timer::clear($timerId);
     }
-
-    // ── Active methods (connection) ──────────────────────────────────
 
     /**
      * Close a connection.
@@ -595,8 +581,6 @@ final class SwooleServer
         return $this->getServer()->getClientList($startFd, $findCount);
     }
 
-    // ── Active methods (IPC) ─────────────────────────────────────────
-
     /**
      * Send a message to another worker process.
      *
@@ -608,8 +592,6 @@ final class SwooleServer
     {
         return $this->getServer()->sendMessage($message, $dstWorkerId);
     }
-
-    // ── Server info ──────────────────────────────────────────────────
 
     /**
      * Get server statistics.
@@ -674,8 +656,6 @@ final class SwooleServer
         return $this->getServer()->getManagerPid();
     }
 
-    // ── Escape hatch ─────────────────────────────────────────────────
-
     /**
      * Get the underlying Swoole server instance.
      *
@@ -692,8 +672,6 @@ final class SwooleServer
 
         return $this->server;
     }
-
-    // ── Internal ─────────────────────────────────────────────────────
 
     /**
      * Check whether any WebSocket callbacks are registered.
@@ -724,7 +702,6 @@ final class SwooleServer
     private function registerCallbacks(Server $server): void
     {
         $callbackMap = [
-            // Lifecycle
             'start' => $this->onStartCallbacks,
             'managerStart' => $this->onManagerStartCallbacks,
             'managerStop' => $this->onManagerStopCallbacks,
@@ -736,15 +713,11 @@ final class SwooleServer
             'shutdown' => $this->onShutdownCallbacks,
             'beforeReload' => $this->onBeforeReloadCallbacks,
             'afterReload' => $this->onAfterReloadCallbacks,
-            // Connection
             'connect' => $this->onConnectCallbacks,
             'close' => $this->onCloseCallbacks,
-            // Task
             'task' => $this->onTaskCallbacks,
             'finish' => $this->onFinishCallbacks,
-            // IPC
             'pipeMessage' => $this->onPipeMessageCallbacks,
-            // WebSocket
             'open' => $this->onOpenCallbacks,
             'message' => $this->onMessageCallbacks,
             'handshake' => $this->onHandshakeCallbacks,
@@ -753,6 +726,11 @@ final class SwooleServer
 
         foreach ($callbackMap as $event => $callbacks) {
             if ($callbacks === []) {
+                continue;
+            }
+
+            if ($event === 'handshake') {
+                $server->on('handshake', $callbacks[array_key_last($callbacks)]);
                 continue;
             }
 
