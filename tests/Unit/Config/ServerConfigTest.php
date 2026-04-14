@@ -11,26 +11,86 @@ use PHPUnit\Framework\TestCase;
 final class ServerConfigTest extends TestCase
 {
     #[Test]
-    public function defaultReturnsInstance(): void
+    public function defaultValuesAreCorrect(): void
     {
-        $config = ServerConfig::default();
+        $config = new ServerConfig();
 
-        self::assertInstanceOf(ServerConfig::class, $config);
+        self::assertNull($config->workerNum);
+        self::assertSame(0, $config->taskWorkerNum);
+        self::assertSame(100000, $config->maxRequest);
+        self::assertSame(100000, $config->maxCoroutine);
+        self::assertSame(3, $config->mode);
+        self::assertSame(1, $config->sockType);
+        self::assertFalse($config->daemonize);
+        self::assertSame('', $config->pidFile);
+        self::assertSame('', $config->logFile);
+        self::assertSame(2, $config->logLevel);
+        self::assertSame(128, $config->backlog);
+        self::assertTrue($config->tcpNodelay);
+        self::assertFalse($config->tcpKeepalive);
+        self::assertSame(2097152, $config->bufferOutputSize);
+        self::assertSame(8388608, $config->socketBufferSize);
+        self::assertSame(2097152, $config->packageMaxLength);
+        self::assertTrue($config->httpParsePost);
+        self::assertTrue($config->httpParseCookie);
+        self::assertTrue($config->httpParseFiles);
+        self::assertTrue($config->httpCompression);
+        self::assertSame(20, $config->httpCompressionMinLength);
+        self::assertSame(1, $config->httpCompressionLevel);
+        self::assertSame('/tmp', $config->uploadTmpDir);
+        self::assertFalse($config->staticHandler);
+        self::assertSame('', $config->documentRoot);
+        self::assertSame([], $config->staticHandlerLocations);
+        self::assertSame('', $config->sslCertFile);
+        self::assertSame('', $config->sslKeyFile);
+        self::assertSame('', $config->sslCaFile);
+        self::assertFalse($config->sslVerifyPeer);
+        self::assertSame(0, $config->sslProtocols);
+        self::assertSame('', $config->sslCiphers);
+        self::assertFalse($config->http2);
+        self::assertSame([], $config->rawSettings);
+    }
+
+    #[Test]
+    public function customValuesViaNamedParams(): void
+    {
+        $config = new ServerConfig(
+            workerNum: 8,
+            taskWorkerNum: 4,
+            maxRequest: 5000,
+            mode: 1,
+            daemonize: true,
+            http2: true,
+        );
+
+        self::assertSame(8, $config->workerNum);
+        self::assertSame(4, $config->taskWorkerNum);
+        self::assertSame(5000, $config->maxRequest);
+        self::assertSame(1, $config->mode);
+        self::assertTrue($config->daemonize);
+        self::assertTrue($config->http2);
     }
 
     #[Test]
     public function toArrayIncludesWorkerNumFromSwooleCpuNum(): void
     {
-        $config = ServerConfig::default();
-        $array = $config->toArray();
+        $config = new ServerConfig();
 
-        self::assertSame(swoole_cpu_num(), $array['worker_num']);
+        self::assertSame(swoole_cpu_num(), $config->toArray()['worker_num']);
+    }
+
+    #[Test]
+    public function toArrayUsesExplicitWorkerNum(): void
+    {
+        $config = new ServerConfig(workerNum: 4);
+
+        self::assertSame(4, $config->toArray()['worker_num']);
     }
 
     #[Test]
     public function toArrayIncludesAllExpectedDefaults(): void
     {
-        $config = ServerConfig::default();
+        $config = new ServerConfig();
         $array = $config->toArray();
 
         self::assertTrue($array['enable_coroutine']);
@@ -58,111 +118,160 @@ final class ServerConfigTest extends TestCase
     }
 
     #[Test]
-    public function withWorkerNumChangesWorkerNumInToArray(): void
+    public function toArrayExcludesPidFileWhenEmpty(): void
     {
-        $config = ServerConfig::default()->withWorkerNum(4);
+        $config = new ServerConfig();
 
-        self::assertSame(4, $config->toArray()['worker_num']);
+        self::assertArrayNotHasKey('pid_file', $config->toArray());
     }
 
     #[Test]
-    public function withMaxRequestChangesMaxRequest(): void
+    public function toArrayIncludesPidFileWhenSet(): void
     {
-        $config = ServerConfig::default()->withMaxRequest(5000);
+        $config = new ServerConfig(pidFile: '/var/run/swoole.pid');
 
-        self::assertSame(5000, $config->toArray()['max_request']);
+        self::assertSame('/var/run/swoole.pid', $config->toArray()['pid_file']);
     }
 
     #[Test]
-    public function withDaemonizeChangesDaemonize(): void
+    public function toArrayExcludesLogFileWhenEmpty(): void
     {
-        $config = ServerConfig::default()->withDaemonize(true);
-
-        self::assertTrue($config->toArray()['daemonize']);
-    }
-
-    #[Test]
-    public function withLogFileIncludesLogFileWhenSet(): void
-    {
-        $config = ServerConfig::default()->withLogFile('/var/log/swoole.log');
-
-        self::assertSame('/var/log/swoole.log', $config->toArray()['log_file']);
-    }
-
-    #[Test]
-    public function withLogFileExcludesLogFileWhenEmpty(): void
-    {
-        $config = ServerConfig::default()->withLogFile('');
+        $config = new ServerConfig();
 
         self::assertArrayNotHasKey('log_file', $config->toArray());
     }
 
     #[Test]
-    public function withSslCertFileIncludesSslCertFileWhenSet(): void
+    public function toArrayIncludesLogFileWhenSet(): void
     {
-        $config = ServerConfig::default()->withSslCertFile('/etc/ssl/cert.pem');
+        $config = new ServerConfig(logFile: '/var/log/swoole.log');
 
-        self::assertSame('/etc/ssl/cert.pem', $config->toArray()['ssl_cert_file']);
+        self::assertSame('/var/log/swoole.log', $config->toArray()['log_file']);
     }
 
     #[Test]
-    public function withStaticHandlerEnablesEnableStaticHandler(): void
+    public function toArrayExcludesDocumentRootWhenEmpty(): void
     {
-        $config = ServerConfig::default()->withStaticHandler(true);
+        $config = new ServerConfig();
 
-        self::assertTrue($config->toArray()['enable_static_handler']);
+        self::assertArrayNotHasKey('document_root', $config->toArray());
     }
 
     #[Test]
-    public function withDocumentRootIncludesDocumentRoot(): void
+    public function toArrayIncludesDocumentRootWhenSet(): void
     {
-        $config = ServerConfig::default()->withDocumentRoot('/var/www/public');
+        $config = new ServerConfig(documentRoot: '/var/www/public');
 
         self::assertSame('/var/www/public', $config->toArray()['document_root']);
     }
 
     #[Test]
-    public function withStaticHandlerLocationsIncludesLocations(): void
+    public function toArrayExcludesStaticHandlerLocationsWhenEmpty(): void
+    {
+        $config = new ServerConfig();
+
+        self::assertArrayNotHasKey('static_handler_locations', $config->toArray());
+    }
+
+    #[Test]
+    public function toArrayIncludesStaticHandlerLocationsWhenSet(): void
     {
         $locations = ['/assets', '/images'];
-        $config = ServerConfig::default()->withStaticHandlerLocations($locations);
+        $config = new ServerConfig(staticHandlerLocations: $locations);
 
         self::assertSame($locations, $config->toArray()['static_handler_locations']);
     }
 
     #[Test]
-    public function withHttp2EnablesOpenHttp2Protocol(): void
+    public function toArrayExcludesSslCertFileWhenEmpty(): void
     {
-        $config = ServerConfig::default()->withHttp2(true);
+        $config = new ServerConfig();
 
-        self::assertTrue($config->toArray()['open_http2_protocol']);
+        self::assertArrayNotHasKey('ssl_cert_file', $config->toArray());
     }
 
     #[Test]
-    public function withHttpCompressionSetsHttpCompression(): void
+    public function toArrayIncludesSslCertFileWhenSet(): void
     {
-        $config = ServerConfig::default()->withHttpCompression(false);
+        $config = new ServerConfig(sslCertFile: '/etc/ssl/cert.pem');
 
-        self::assertFalse($config->toArray()['http_compression']);
+        self::assertSame('/etc/ssl/cert.pem', $config->toArray()['ssl_cert_file']);
     }
 
     #[Test]
-    public function withHttpCompressionLevelSetsLevel(): void
+    public function toArrayExcludesSslKeyFileWhenEmpty(): void
     {
-        $config = ServerConfig::default()->withHttpCompressionLevel(6);
+        $config = new ServerConfig();
 
-        self::assertSame(6, $config->toArray()['http_compression_level']);
+        self::assertArrayNotHasKey('ssl_key_file', $config->toArray());
     }
 
     #[Test]
-    public function withRawSettingsMergesSettingsTypedTakesPrecedence(): void
+    public function toArrayIncludesSslKeyFileWhenSet(): void
     {
-        $config = ServerConfig::default()
-            ->withWorkerNum(8)
-            ->withRawSettings([
+        $config = new ServerConfig(sslKeyFile: '/etc/ssl/key.pem');
+
+        self::assertSame('/etc/ssl/key.pem', $config->toArray()['ssl_key_file']);
+    }
+
+    #[Test]
+    public function toArrayExcludesSslCaFileWhenEmpty(): void
+    {
+        $config = new ServerConfig();
+
+        self::assertArrayNotHasKey('ssl_ca_file', $config->toArray());
+    }
+
+    #[Test]
+    public function toArrayIncludesSslCaFileWhenSet(): void
+    {
+        $config = new ServerConfig(sslCaFile: '/etc/ssl/ca.pem');
+
+        self::assertSame('/etc/ssl/ca.pem', $config->toArray()['ssl_ca_file']);
+    }
+
+    #[Test]
+    public function toArrayExcludesSslProtocolsWhenZero(): void
+    {
+        $config = new ServerConfig();
+
+        self::assertArrayNotHasKey('ssl_protocols', $config->toArray());
+    }
+
+    #[Test]
+    public function toArrayIncludesSslProtocolsWhenSet(): void
+    {
+        $config = new ServerConfig(sslProtocols: 6);
+
+        self::assertSame(6, $config->toArray()['ssl_protocols']);
+    }
+
+    #[Test]
+    public function toArrayExcludesSslCiphersWhenEmpty(): void
+    {
+        $config = new ServerConfig();
+
+        self::assertArrayNotHasKey('ssl_ciphers', $config->toArray());
+    }
+
+    #[Test]
+    public function toArrayIncludesSslCiphersWhenSet(): void
+    {
+        $config = new ServerConfig(sslCiphers: 'ECDHE-RSA-AES128-GCM-SHA256');
+
+        self::assertSame('ECDHE-RSA-AES128-GCM-SHA256', $config->toArray()['ssl_ciphers']);
+    }
+
+    #[Test]
+    public function toArrayRawSettingsMergedTypedTakesPrecedence(): void
+    {
+        $config = new ServerConfig(
+            workerNum: 8,
+            rawSettings: [
                 'worker_num' => 2,
                 'custom_setting' => 'value',
-            ]);
+            ],
+        );
 
         $array = $config->toArray();
 
@@ -171,127 +280,34 @@ final class ServerConfigTest extends TestCase
     }
 
     #[Test]
-    public function getModeReturnsConfiguredMode(): void
+    public function toArrayEnablesHttp2(): void
     {
-        $config = ServerConfig::default();
-        self::assertSame(3, $config->getMode());
+        $config = new ServerConfig(http2: true);
 
-        $config = $config->withMode(1);
-        self::assertSame(1, $config->getMode());
+        self::assertTrue($config->toArray()['open_http2_protocol']);
     }
 
     #[Test]
-    public function getSockTypeReturnsConfiguredSockType(): void
+    public function toArrayDisablesHttpCompression(): void
     {
-        $config = ServerConfig::default();
-        self::assertSame(1, $config->getSockType());
+        $config = new ServerConfig(httpCompression: false);
 
-        $config = $config->withSockType(6);
-        self::assertSame(6, $config->getSockType());
+        self::assertFalse($config->toArray()['http_compression']);
     }
 
     #[Test]
-    public function onWorkerStartAddsCallbackToGetCallbacks(): void
+    public function toArraySetsCompressionLevel(): void
     {
-        $callback = static function (): void {};
-        $config = ServerConfig::default()->onWorkerStart($callback);
+        $config = new ServerConfig(httpCompressionLevel: 6);
 
-        $callbacks = $config->getCallbacks();
-
-        self::assertCount(1, $callbacks['workerStart']);
-        self::assertSame($callback, $callbacks['workerStart'][0]);
+        self::assertSame(6, $config->toArray()['http_compression_level']);
     }
 
     #[Test]
-    public function onStartAddsCallback(): void
+    public function toArrayEnablesStaticHandler(): void
     {
-        $callback = static function (): void {};
-        $config = ServerConfig::default()->onStart($callback);
+        $config = new ServerConfig(staticHandler: true);
 
-        $callbacks = $config->getCallbacks();
-
-        self::assertCount(1, $callbacks['start']);
-        self::assertSame($callback, $callbacks['start'][0]);
-    }
-
-    #[Test]
-    public function onShutdownAddsCallback(): void
-    {
-        $callback = static function (): void {};
-        $config = ServerConfig::default()->onShutdown($callback);
-
-        $callbacks = $config->getCallbacks();
-
-        self::assertCount(1, $callbacks['shutdown']);
-        self::assertSame($callback, $callbacks['shutdown'][0]);
-    }
-
-    #[Test]
-    public function multipleCallbacksForSameEventArePreserved(): void
-    {
-        $cb1 = static function (): void {};
-        $cb2 = static function (): void {};
-        $config = ServerConfig::default()
-            ->onWorkerStart($cb1)
-            ->onWorkerStart($cb2);
-
-        $callbacks = $config->getCallbacks();
-
-        self::assertCount(2, $callbacks['workerStart']);
-        self::assertSame($cb1, $callbacks['workerStart'][0]);
-        self::assertSame($cb2, $callbacks['workerStart'][1]);
-    }
-
-    #[Test]
-    public function getCallbacksReturnsEmptyArraysForUnsetEvents(): void
-    {
-        $config = ServerConfig::default();
-        $callbacks = $config->getCallbacks();
-
-        self::assertSame([], $callbacks['start']);
-        self::assertSame([], $callbacks['managerStart']);
-        self::assertSame([], $callbacks['workerStart']);
-        self::assertSame([], $callbacks['workerStop']);
-        self::assertSame([], $callbacks['workerExit']);
-        self::assertSame([], $callbacks['workerError']);
-        self::assertSame([], $callbacks['beforeShutdown']);
-        self::assertSame([], $callbacks['shutdown']);
-    }
-
-    #[Test]
-    public function immutabilityWithMethodsReturnNewInstanceOriginalUnchanged(): void
-    {
-        $original = ServerConfig::default();
-        $modified = $original->withWorkerNum(16);
-
-        self::assertSame(swoole_cpu_num(), $original->toArray()['worker_num']);
-        self::assertSame(16, $modified->toArray()['worker_num']);
-        self::assertNotSame($original, $modified);
-    }
-
-    #[Test]
-    public function immutabilityCallbacksDoNotMutateOriginal(): void
-    {
-        $original = ServerConfig::default();
-        $modified = $original->onStart(static function (): void {});
-
-        self::assertSame([], $original->getCallbacks()['start']);
-        self::assertCount(1, $modified->getCallbacks()['start']);
-    }
-
-    #[Test]
-    public function withPidFileIncludesPidFileWhenSet(): void
-    {
-        $config = ServerConfig::default()->withPidFile('/var/run/swoole.pid');
-
-        self::assertSame('/var/run/swoole.pid', $config->toArray()['pid_file']);
-    }
-
-    #[Test]
-    public function withPidFileExcludesPidFileWhenEmpty(): void
-    {
-        $config = ServerConfig::default()->withPidFile('');
-
-        self::assertArrayNotHasKey('pid_file', $config->toArray());
+        self::assertTrue($config->toArray()['enable_static_handler']);
     }
 }
