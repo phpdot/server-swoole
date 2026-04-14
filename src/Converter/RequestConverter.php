@@ -127,7 +127,9 @@ final class RequestConverter
         } else {
             $addr = $server['server_addr'] ?? 'localhost';
             $port = $server['server_port'] ?? '';
-            if ($port !== '' && $port !== '80' && $port !== '443') {
+            $isDefaultPort = ($scheme === 'http' && $port === '80')
+                || ($scheme === 'https' && $port === '443');
+            if ($port !== '' && !$isDefaultPort) {
                 $host = $addr . ':' . $port;
             } else {
                 $host = $addr;
@@ -158,12 +160,13 @@ final class RequestConverter
             $serverParams[strtoupper($key)] = $value;
         }
 
-        if (isset($headers['content-type'])) {
-            $serverParams['CONTENT_TYPE'] = $headers['content-type'];
-        }
-
-        if (isset($headers['content-length'])) {
-            $serverParams['CONTENT_LENGTH'] = $headers['content-length'];
+        foreach ($headers as $name => $value) {
+            $upperName = strtoupper(str_replace('-', '_', $name));
+            if ($upperName === 'CONTENT_TYPE' || $upperName === 'CONTENT_LENGTH') {
+                $serverParams[$upperName] = $value;
+            } else {
+                $serverParams['HTTP_' . $upperName] = $value;
+            }
         }
 
         return $serverParams;

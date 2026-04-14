@@ -33,7 +33,9 @@ final class ResponseConverter
      * Write a PSR-7 response to a Swoole response object.
      *
      * Handles status codes, headers, cookies, trailer headers, and body
-     * emission using the most efficient strategy available.
+     * emission using the most efficient strategy available. Strips
+     * Content-Length when the body will be streamed via write() to
+     * avoid conflicting with Swoole's Transfer-Encoding: chunked.
      *
      * @param ResponseInterface $psrResponse The PSR-7 response to send
      * @param SwooleResponse $swooleResponse The Swoole response to write to
@@ -50,12 +52,17 @@ final class ResponseConverter
             );
         }
 
+        $willStream = $this->willStream($psrResponse);
+
         foreach ($psrResponse->getHeaders() as $name => $values) {
             $lower = strtolower($name);
             if ($lower === 'set-cookie') {
                 continue;
             }
             if ($lower === 'transfer-encoding') {
+                continue;
+            }
+            if ($lower === 'content-length' && $willStream) {
                 continue;
             }
             if (in_array($lower, $trailerNames, true)) {
@@ -65,7 +72,7 @@ final class ResponseConverter
         }
 
         $this->emitCookies($psrResponse, $swooleResponse);
-        $this->emitTrailers($psrResponse, $swooleResponse);
+        $this->emitTrailers($psrResponse, $swooleResponse, $trailerNames);
         $this->emitBody($psrResponse, $swooleResponse);
     }
 
@@ -155,6 +162,36 @@ final class ResponseConverter
     }
 
     /**
+     * Determine whether the body will be emitted via write() (streaming).
+     *
+     * Used to strip Content-Length before headers are sent, avoiding
+     * a conflict with Swoole's automatic Transfer-Encoding: chunked.
+     */
+    private function willStream(ResponseInterface $psrResponse): bool
+    {
+        $body = $psrResponse->getBody();
+
+        if ($body instanceof CallbackStreamInterface) {
+            return true;
+        }
+
+        $meta = $body->getMetadata();
+        if (
+            is_array($meta)
+            && ($meta['wrapper_type'] ?? '') === 'plainfile'
+            && isset($meta['uri'])
+            && is_string($meta['uri'])
+            && is_file($meta['uri'])
+        ) {
+            return false;
+        }
+
+        $size = $body->getSize();
+
+        return $size === null || $size > $this->chunkSize;
+    }
+
+    /**
      * Emit Set-Cookie headers as Swoole cookies.
      *
      * @param ResponseInterface $psrResponse The PSR-7 response containing Set-Cookie headers
@@ -185,14 +222,10 @@ final class ResponseConverter
      *
      * @param ResponseInterface $psrResponse The PSR-7 response
      * @param SwooleResponse $swooleResponse The Swoole response
+     * @param list<string> $trailerNames Lowercased trailer header names
      */
-    private function emitTrailers(ResponseInterface $psrResponse, SwooleResponse $swooleResponse): void
+    private function emitTrailers(ResponseInterface $psrResponse, SwooleResponse $swooleResponse, array $trailerNames): void
     {
-        if (!$psrResponse->hasHeader('Trailer')) {
-            return;
-        }
-
-        $trailerNames = array_map('trim', explode(',', $psrResponse->getHeaderLine('Trailer')));
         foreach ($trailerNames as $trailerName) {
             if ($psrResponse->hasHeader($trailerName)) {
                 $swooleResponse->trailer($trailerName, $psrResponse->getHeaderLine($trailerName));
@@ -203,8 +236,9 @@ final class ResponseConverter
     /**
      * Emit the response body using the most efficient strategy.
      *
-     * Strategies in order: callback stream, file sendfile, empty body,
-     * chunked transfer for large bodies, or direct end for small bodies.
+     * Strategies in order: callback stream, file sendfile (with range
+     * support), empty body, incremental streaming for large/unknown-size
+     * bodies, or direct end for small bodies.
      *
      * @param ResponseInterface $psrResponse The PSR-7 response
      * @param SwooleResponse $swooleResponse The Swoole response
@@ -230,7 +264,18 @@ final class ResponseConverter
             && is_string($meta['uri'])
             && is_file($meta['uri'])
         ) {
-            $swooleResponse->sendfile($meta['uri']);
+            $offset = 0;
+            $length = 0;
+
+            if ($psrResponse->hasHeader('Content-Range')) {
+                $range = $psrResponse->getHeaderLine('Content-Range');
+                if (preg_match('/bytes\s+(\d+)-(\d+)/', $range, $matches) === 1) {
+                    $offset = (int) $matches[1];
+                    $length = (int) $matches[2] - $offset + 1;
+                }
+            }
+
+            $swooleResponse->sendfile($meta['uri'], $offset, $length);
             return;
         }
 
@@ -240,17 +285,22 @@ final class ResponseConverter
             return;
         }
 
-        $content = (string) $body;
-        if ($content === '') {
+        if ($size === null || $size > $this->chunkSize) {
+            if ($body->isSeekable()) {
+                $body->rewind();
+            }
+            while (!$body->eof()) {
+                $chunk = $body->read($this->chunkSize);
+                if ($chunk !== '') {
+                    $swooleResponse->write($chunk);
+                }
+            }
             $swooleResponse->end();
             return;
         }
 
-        if (strlen($content) > $this->chunkSize) {
-            $contentLength = strlen($content);
-            for ($offset = 0; $offset < $contentLength; $offset += $this->chunkSize) {
-                $swooleResponse->write(substr($content, $offset, $this->chunkSize));
-            }
+        $content = (string) $body;
+        if ($content === '') {
             $swooleResponse->end();
             return;
         }

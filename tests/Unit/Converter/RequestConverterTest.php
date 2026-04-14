@@ -489,4 +489,80 @@ final class RequestConverterTest extends TestCase
         self::assertArrayHasKey('avatar', $uploadedFiles);
         self::assertSame(UPLOAD_ERR_NO_FILE, $uploadedFiles['avatar']->getError());
     }
+
+    #[Test]
+    public function httpHeadersAddedToServerParamsWithHttpPrefix(): void
+    {
+        $request = $this->converter->assembleRequest(
+            headers: ['authorization' => 'Bearer token', 'accept' => 'application/json', 'x-forwarded-for' => '1.2.3.4'],
+            server: ['request_method' => 'get', 'request_uri' => '/'],
+            cookies: [],
+            query: [],
+            post: null,
+            files: [],
+            body: '',
+        );
+
+        $serverParams = $request->getServerParams();
+
+        self::assertSame('Bearer token', $serverParams['HTTP_AUTHORIZATION']);
+        self::assertSame('application/json', $serverParams['HTTP_ACCEPT']);
+        self::assertSame('1.2.3.4', $serverParams['HTTP_X_FORWARDED_FOR']);
+    }
+
+    #[Test]
+    public function contentTypeAndLengthHaveNoHttpPrefix(): void
+    {
+        $request = $this->converter->assembleRequest(
+            headers: ['content-type' => 'application/json', 'content-length' => '42', 'accept' => 'text/html'],
+            server: ['request_method' => 'post', 'request_uri' => '/'],
+            cookies: [],
+            query: [],
+            post: null,
+            files: [],
+            body: '',
+        );
+
+        $serverParams = $request->getServerParams();
+
+        self::assertSame('application/json', $serverParams['CONTENT_TYPE']);
+        self::assertSame('42', $serverParams['CONTENT_LENGTH']);
+        self::assertArrayNotHasKey('HTTP_CONTENT_TYPE', $serverParams);
+        self::assertArrayNotHasKey('HTTP_CONTENT_LENGTH', $serverParams);
+        self::assertSame('text/html', $serverParams['HTTP_ACCEPT']);
+    }
+
+    #[Test]
+    public function httpsOnPort80IncludesPort(): void
+    {
+        $request = $this->converter->assembleRequest(
+            headers: [],
+            server: ['request_method' => 'get', 'request_uri' => '/', 'https' => 'on', 'server_addr' => '10.0.0.1', 'server_port' => '80'],
+            cookies: [],
+            query: [],
+            post: null,
+            files: [],
+            body: '',
+        );
+
+        self::assertSame('https', $request->getUri()->getScheme());
+        self::assertSame(80, $request->getUri()->getPort());
+    }
+
+    #[Test]
+    public function httpsOnPort443ExcludesPort(): void
+    {
+        $request = $this->converter->assembleRequest(
+            headers: [],
+            server: ['request_method' => 'get', 'request_uri' => '/', 'https' => 'on', 'server_addr' => '10.0.0.1', 'server_port' => '443'],
+            cookies: [],
+            query: [],
+            post: null,
+            files: [],
+            body: '',
+        );
+
+        self::assertSame('https', $request->getUri()->getScheme());
+        self::assertNull($request->getUri()->getPort());
+    }
 }
