@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace PHPdot\Server\Swoole;
 
 use Closure;
+use PHPdot\Contracts\Server\SseHandlerInterface;
+use PHPdot\Contracts\Server\WebSocketHandlerInterface;
 use PHPdot\Server\Swoole\Config\ServerConfig;
 use PHPdot\Server\Swoole\Converter\RequestConverter;
 use PHPdot\Server\Swoole\Converter\ResponseConverter;
@@ -18,6 +20,7 @@ use Swoole\Http\Request as SwooleRequest;
 use Swoole\Http\Response as SwooleResponse;
 use Swoole\Http\Server;
 use Swoole\Timer;
+use Swoole\WebSocket\Frame as SwooleFrame;
 use Swoole\WebSocket\Server as WebSocketServer;
 
 /**
@@ -137,10 +140,17 @@ final class SwooleServer
         string $host = '0.0.0.0',
         int $port = 8080,
     ): void {
-        if ($this->hasWebSocket() && $this->onMessageCallbacks === []) {
+        $hasWsInterface = $handler instanceof WebSocketHandlerInterface;
+        $hasSseInterface = $handler instanceof SseHandlerInterface;
+
+        if ($this->hasWebSocket() && $this->onMessageCallbacks === [] && !$hasWsInterface) {
             throw new ServerException(
                 'WebSocket callbacks registered but onMessage is missing. Swoole requires onMessage for WebSocket servers.',
             );
+        }
+
+        if ($hasWsInterface) {
+            $this->registerWsHandler($handler);
         }
 
         $server = $this->createServer($host, $port);
@@ -148,9 +158,36 @@ final class SwooleServer
 
         $this->registerCallbacks($server);
 
-        $server->on('request', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) use ($handler): void {
+        $server->on('request', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) use ($handler, $hasSseInterface): void {
             try {
                 $psrRequest = $this->requestConverter->toServerRequest($swooleRequest);
+
+                if ($hasSseInterface && str_contains($psrRequest->getHeaderLine('accept'), 'text/event-stream')) {
+                    assert($handler instanceof SseHandlerInterface);
+
+                    $swooleResponse->header('Content-Type', 'text/event-stream');
+                    $swooleResponse->header('Cache-Control', 'no-cache');
+                    $swooleResponse->header('Connection', 'keep-alive');
+
+                    $handled = $handler->handleSse(
+                        $psrRequest,
+                        static function (string $data) use ($swooleResponse): void {
+                            $swooleResponse->write($data);
+                        },
+                        static function () use ($swooleResponse): void {
+                            $swooleResponse->end();
+                        },
+                    );
+
+                    if ($handled) {
+                        if (!$swooleResponse->isWritable()) {
+                            return;
+                        }
+                        $swooleResponse->end();
+                        return;
+                    }
+                }
+
                 $psrResponse = $handler->handle($psrRequest);
                 $this->responseConverter->toSwoole($psrResponse, $swooleResponse);
             } catch (\Throwable $e) {
@@ -161,6 +198,38 @@ final class SwooleServer
 
         $this->server = $server;
         $server->start();
+    }
+
+    /**
+     * Register WebSocket event handlers from a WebSocketHandlerInterface.
+     */
+    private function registerWsHandler(WebSocketHandlerInterface $handler): void
+    {
+        $converter = $this->requestConverter;
+
+        $this->onOpenCallbacks[] = static function (WebSocketServer $ws, SwooleRequest $req) use ($handler, $converter): void {
+            $psrRequest = $converter->toServerRequest($req);
+
+            $accepted = $handler->handleWsOpen(
+                $req->fd,
+                $psrRequest,
+                static fn(string $data): bool => $ws->push($req->fd, $data),
+                static fn(string $data): bool => $ws->push($req->fd, $data, WEBSOCKET_OPCODE_BINARY),
+                static fn(int $code, string $reason): bool => $ws->disconnect($req->fd, $code, $reason),
+            );
+
+            if (!$accepted) {
+                $ws->disconnect($req->fd);
+            }
+        };
+
+        $this->onMessageCallbacks[] = static function (WebSocketServer $ws, SwooleFrame $frame) use ($handler): void {
+            $handler->handleWsMessage($frame->fd, $frame->data, $frame->opcode);
+        };
+
+        $this->onCloseCallbacks[] = static function (Server $server, int $fd) use ($handler): void {
+            $handler->handleWsClose($fd, 1000, '');
+        };
     }
 
     /**
