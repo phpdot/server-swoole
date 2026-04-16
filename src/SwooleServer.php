@@ -166,8 +166,9 @@ final class SwooleServer
                     assert($handler instanceof SseHandlerInterface);
 
                     $swooleResponse->header('Content-Type', 'text/event-stream');
-                    $swooleResponse->header('Cache-Control', 'no-cache');
+                    $swooleResponse->header('Cache-Control', 'no-cache, no-transform');
                     $swooleResponse->header('Connection', 'keep-alive');
+                    $swooleResponse->header('X-Accel-Buffering', 'no');
 
                     $handled = $handler->handleSse(
                         $psrRequest,
