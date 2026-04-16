@@ -11,7 +11,6 @@ use PHPdot\Server\Swoole\Config\ServerConfig;
 use PHPdot\Server\Swoole\Converter\RequestConverter;
 use PHPdot\Server\Swoole\Converter\ResponseConverter;
 use PHPdot\Server\Swoole\Exception\ServerException;
-use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Message\ServerRequestFactoryInterface;
 use Psr\Http\Message\StreamFactoryInterface;
 use Psr\Http\Message\UploadedFileFactoryInterface;
@@ -169,7 +168,7 @@ final class SwooleServer
                     $headersSet = false;
                     $handled = $handler->handleSse(
                         $psrRequest,
-                        static function (string $data) use ($swooleResponse, &$headersSet): void {
+                        static function (string $data) use ($swooleResponse, &$headersSet): bool {
                             if (!$headersSet) {
                                 $swooleResponse->header('Content-Type', 'text/event-stream');
                                 $swooleResponse->header('Cache-Control', 'no-cache, no-transform');
@@ -177,7 +176,7 @@ final class SwooleServer
                                 $swooleResponse->header('X-Accel-Buffering', 'no');
                                 $headersSet = true;
                             }
-                            $swooleResponse->write($data);
+                            return $swooleResponse->write($data);
                         },
                         static function () use ($swooleResponse): void {
                             $swooleResponse->end();
@@ -756,16 +755,6 @@ final class SwooleServer
             || $this->onMessageCallbacks !== []
             || $this->onHandshakeCallbacks !== []
             || $this->onDisconnectCallbacks !== [];
-    }
-
-    /**
-     * Convert a Swoole request to a PSR-7 server request.
-     *
-     * @param SwooleRequest $swooleRequest The Swoole request to convert
-     */
-    private function convertRequest(SwooleRequest $swooleRequest): ServerRequestInterface
-    {
-        return $this->requestConverter->toServerRequest($swooleRequest);
     }
 
     /**
