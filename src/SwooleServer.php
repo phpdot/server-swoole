@@ -11,6 +11,7 @@ use PHPdot\Server\Swoole\Config\ServerConfig;
 use PHPdot\Server\Swoole\Converter\RequestConverter;
 use PHPdot\Server\Swoole\Converter\ResponseConverter;
 use PHPdot\Server\Swoole\Exception\ServerException;
+use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Message\ServerRequestFactoryInterface;
 use Psr\Http\Message\StreamFactoryInterface;
 use Psr\Http\Message\UploadedFileFactoryInterface;
@@ -760,9 +761,9 @@ final class SwooleServer
     /**
      * Convert a Swoole request to a PSR-7 server request.
      *
-     * @param \Swoole\Http\Request $swooleRequest The Swoole request to convert
+     * @param SwooleRequest $swooleRequest The Swoole request to convert
      */
-    private function convertRequest(\Swoole\Http\Request $swooleRequest): \Psr\Http\Message\ServerRequestInterface
+    private function convertRequest(SwooleRequest $swooleRequest): ServerRequestInterface
     {
         return $this->requestConverter->toServerRequest($swooleRequest);
     }
