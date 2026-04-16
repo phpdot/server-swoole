@@ -165,14 +165,17 @@ final class SwooleServer
                 if ($hasSseInterface && str_contains($psrRequest->getHeaderLine('accept'), 'text/event-stream')) {
                     assert($handler instanceof SseHandlerInterface);
 
-                    $swooleResponse->header('Content-Type', 'text/event-stream');
-                    $swooleResponse->header('Cache-Control', 'no-cache, no-transform');
-                    $swooleResponse->header('Connection', 'keep-alive');
-                    $swooleResponse->header('X-Accel-Buffering', 'no');
-
+                    $headersSet = false;
                     $handled = $handler->handleSse(
                         $psrRequest,
-                        static function (string $data) use ($swooleResponse): void {
+                        static function (string $data) use ($swooleResponse, &$headersSet): void {
+                            if (!$headersSet) {
+                                $swooleResponse->header('Content-Type', 'text/event-stream');
+                                $swooleResponse->header('Cache-Control', 'no-cache, no-transform');
+                                $swooleResponse->header('Connection', 'keep-alive');
+                                $swooleResponse->header('X-Accel-Buffering', 'no');
+                                $headersSet = true;
+                            }
                             $swooleResponse->write($data);
                         },
                         static function () use ($swooleResponse): void {
@@ -759,7 +762,7 @@ final class SwooleServer
      *
      * @param \Swoole\Http\Request $swooleRequest The Swoole request to convert
      */
-    public function convertRequest(\Swoole\Http\Request $swooleRequest): \Psr\Http\Message\ServerRequestInterface
+    private function convertRequest(\Swoole\Http\Request $swooleRequest): \Psr\Http\Message\ServerRequestInterface
     {
         return $this->requestConverter->toServerRequest($swooleRequest);
     }
