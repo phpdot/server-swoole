@@ -19,8 +19,8 @@ final class ServerConfigTest extends TestCase
         self::assertSame(0, $config->taskWorkerNum);
         self::assertSame(100000, $config->maxRequest);
         self::assertSame(100000, $config->maxCoroutine);
-        self::assertSame(3, $config->mode);
-        self::assertSame(1, $config->sockType);
+        self::assertSame(SWOOLE_PROCESS, $config->mode);
+        self::assertSame(SWOOLE_SOCK_TCP, $config->sockType);
         self::assertFalse($config->daemonize);
         self::assertSame('', $config->pidFile);
         self::assertSame('', $config->logFile);

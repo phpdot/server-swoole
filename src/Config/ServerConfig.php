@@ -21,8 +21,8 @@ final class ServerConfig
      * @param int $taskWorkerNum Task worker count
      * @param int $maxRequest Max requests per worker before restart
      * @param int $maxCoroutine Max coroutines per worker
-     * @param int $mode SWOOLE_PROCESS (3) or SWOOLE_BASE (1)
-     * @param int $sockType SWOOLE_SOCK_TCP (1), add SWOOLE_SSL for TLS
+     * @param int $mode Swoole server mode. Use SWOOLE_PROCESS or SWOOLE_BASE — the numeric values differ across Swoole versions.
+     * @param int $sockType Swoole socket type. Use SWOOLE_SOCK_TCP (add SWOOLE_SSL for TLS).
      * @param bool $daemonize Run as daemon
      * @param string $pidFile PID file path
      * @param string $logFile Log file path
@@ -50,6 +50,12 @@ final class ServerConfig
      * @param int $sslProtocols SSL protocols bitmask (0 = Swoole default)
      * @param string $sslCiphers SSL cipher list
      * @param bool $http2 Enable HTTP/2 protocol
+     * @param int $hookFlags `Swoole\Runtime::enableCoroutine()` flags — applied
+     *                       in the master before worker fork, so every worker and user
+     *                       process inherits. Defaults to `SWOOLE_HOOK_ALL` so blocking PHP
+     *                       I/O (phpredis, PDO, cURL, file, mysqli) yields the coroutine
+     *                       scheduler instead of blocking the whole worker. Set to 0 to
+     *                       opt out; use a narrower mask to hook selectively.
      * @param array<string, mixed> $rawSettings Extra Swoole settings merged underneath typed settings
      */
     public function __construct(
@@ -57,8 +63,8 @@ final class ServerConfig
         public readonly int $taskWorkerNum = 0,
         public readonly int $maxRequest = 100000,
         public readonly int $maxCoroutine = 100000,
-        public readonly int $mode = 3,
-        public readonly int $sockType = 1,
+        public readonly int $mode = SWOOLE_PROCESS,
+        public readonly int $sockType = SWOOLE_SOCK_TCP,
         public readonly bool $daemonize = false,
         public readonly string $pidFile = '',
         public readonly string $logFile = '',
@@ -86,6 +92,7 @@ final class ServerConfig
         public readonly int $sslProtocols = 0,
         public readonly string $sslCiphers = '',
         public readonly bool $http2 = false,
+        public readonly int $hookFlags = SWOOLE_HOOK_ALL,
         public readonly array $rawSettings = [],
     ) {}
 
