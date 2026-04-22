@@ -105,6 +105,9 @@ final class SwooleServer
     /** @var list<Closure> */
     private array $onDisconnectCallbacks = [];
 
+    /** @var list<Closure(\Swoole\Process): void> */
+    private array $userProcessHandlers = [];
+
     /**
      * Create a new SwooleServer.
      *
@@ -158,6 +161,10 @@ final class SwooleServer
 
         $this->registerCallbacks($server);
 
+        foreach ($this->userProcessHandlers as $processHandler) {
+            $server->addProcess(new \Swoole\Process($processHandler, false, 0, true));
+        }
+
         $server->on('request', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) use ($handler, $hasSseInterface): void {
             try {
                 $psrRequest = $this->requestConverter->toServerRequest($swooleRequest);
@@ -201,6 +208,11 @@ final class SwooleServer
         });
 
         $this->server = $server;
+
+        if ($this->config->hookFlags !== 0) {
+            \Swoole\Runtime::enableCoroutine($this->config->hookFlags);
+        }
+
         $server->start();
     }
 
@@ -727,6 +739,18 @@ final class SwooleServer
     public function getManagerPid(): int
     {
         return $this->getServer()->getManagerPid();
+    }
+
+    /**
+     * Register a Swoole user process to be spawned alongside the server.
+     * The closure runs as its own OS process, managed by the Swoole master
+     * (auto-restart on crash). Must be called before serve().
+     *
+     * @param Closure(\Swoole\Process): void $handler
+     */
+    public function addProcess(Closure $handler): void
+    {
+        $this->userProcessHandlers[] = $handler;
     }
 
     /**
