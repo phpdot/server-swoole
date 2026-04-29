@@ -320,46 +320,20 @@ The `ResponseConverter` detects this interface and streams each chunk directly v
 
 ## Architecture
 
-```
-                     Swoole HTTP/WS Server
-                           |
-                    Swoole\Http\Request
-                           |
-                           v
-               +-------------------------+
-               |   RequestConverter       |
-               |                         |
-               |   Swoole -> PSR-7       |
-               |   Headers, URI, body,   |
-               |   cookies, files        |
-               +-------------------------+
-                           |
-                  ServerRequestInterface
-                           |
-                           v
-               +-------------------------+
-               |   Your PSR-15 Handler   |
-               |                         |
-               |   Router, middleware,   |
-               |   controllers -- your   |
-               |   application logic     |
-               +-------------------------+
-                           |
-                   ResponseInterface
-                           |
-                           v
-               +-------------------------+
-               |   ResponseConverter     |
-               |                         |
-               |   PSR-7 -> Swoole       |
-               |   Headers, cookies,     |
-               |   sendfile, chunked,    |
-               |   streaming             |
-               +-------------------------+
-                           |
-                   Swoole\Http\Response
-                           |
-                        Client
+```mermaid
+flowchart TB
+    Client(["Client"])
+    Server["Swoole HTTP / WS Server"]
+    ReqConv["<b>RequestConverter</b><br/>Swoole → PSR-7<br/>headers, URI, body, cookies, files"]
+    Handler["<b>Your PSR-15 Handler</b><br/>router, middleware, controllers"]
+    ResConv["<b>ResponseConverter</b><br/>PSR-7 → Swoole<br/>sendfile, chunked, streaming"]
+
+    Client --> Server
+    Server -- "Swoole\Http\Request" --> ReqConv
+    ReqConv -- "ServerRequestInterface" --> Handler
+    Handler -- "ResponseInterface" --> ResConv
+    ResConv -- "Swoole\Http\Response" --> Server
+    Server --> Client
 ```
 
 ### Response Emission Strategies
