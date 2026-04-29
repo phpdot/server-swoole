@@ -19,12 +19,17 @@
         "psr/http-server-handler": "^1.0"
     },
     "require-dev": {
-        "phpunit/phpunit": "^11.0",
+        "friendsofphp/php-cs-fixer": "^3.94",
+        "nyholm/psr7": "^1.8",
+        "phpdot/container": "^1.6",
         "phpstan/phpstan": "^2.0",
         "phpstan/phpstan-strict-rules": "^2.0",
-        "swoole/ide-helper": "*",
-        "nyholm/psr7": "^1.8",
-        "friendsofphp/php-cs-fixer": "^3.94"
+        "phpunit/phpunit": "^11.0",
+        "swoole/ide-helper": "*"
+    },
+    "suggest": {
+        "phpdot/container": "Required for the framework's manifest scanner to auto-wire ServerConfig from config/server.php via the #[Config] attribute. The attribute is inert at runtime; standalone consumers don't need it installed.",
+        "phpdot/container-swoole": "Provides SwooleContextProvider for per-coroutine isolation of Scoped services. Recommended for any phpdot app running under this server."
     },
     "autoload": {
         "psr-4": {

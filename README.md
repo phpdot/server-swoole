@@ -105,6 +105,43 @@ $config = new ServerConfig(
 
 Typed properties always take precedence over `rawSettings`.
 
+### Inside the phpdot framework
+
+`ServerConfig` carries `#[Config('server')]`, so when used with `phpdot/package` it's auto-hydrated from `config/server.php`:
+
+```php
+// config/server.php
+return [
+    'workerNum'  => 4,
+    'maxRequest' => 10000,
+    'daemonize'  => false,
+    // ... any ServerConfig property
+];
+```
+
+The container resolves `ServerConfig` automatically — no manual `new ServerConfig(...)` needed when running inside the framework. Standalone consumers (no `phpdot/package`) instantiate `ServerConfig` directly via the constructor as shown above.
+
+`SwooleServer` itself isn't auto-wired (its constructor uses an intersection type for the PSR-17 factory, which PHP-DI can't autowire). Register it manually in your application boot:
+
+```php
+$builder->register(
+    SwooleServer::class,
+    new ScopedDefinition(
+        scope: Scope::SINGLETON,
+        factory: static fn (ContainerInterface $c): SwooleServer => new SwooleServer(
+            $c->get(\PHPdot\Http\ResponseFactory::class),  // satisfies all 4 PSR-17 factory interfaces
+            $c->get(ServerConfig::class),
+        ),
+    ),
+);
+```
+
+For per-coroutine scoping of `Scope::SCOPED` services (the standard pattern under Swoole), install `phpdot/container-swoole` and register its provider:
+
+```php
+$builder->withContextProvider(new SwooleContextProvider());
+```
+
 ---
 
 ## Event Callbacks
