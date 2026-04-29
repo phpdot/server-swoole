@@ -143,16 +143,13 @@ final class SwooleServer
         string $host = '0.0.0.0',
         int $port = 8080,
     ): void {
-        $hasWsInterface = $handler instanceof WebSocketHandlerInterface;
-        $hasSseInterface = $handler instanceof SseHandlerInterface;
-
-        if ($this->hasWebSocket() && $this->onMessageCallbacks === [] && !$hasWsInterface) {
+        if ($this->hasWebSocket() && $this->onMessageCallbacks === [] && !$handler instanceof WebSocketHandlerInterface) {
             throw new ServerException(
                 'WebSocket callbacks registered but onMessage is missing. Swoole requires onMessage for WebSocket servers.',
             );
         }
 
-        if ($hasWsInterface) {
+        if ($handler instanceof WebSocketHandlerInterface) {
             $this->registerWsHandler($handler);
         }
 
@@ -165,13 +162,11 @@ final class SwooleServer
             $server->addProcess(new \Swoole\Process($processHandler, false, 0, true));
         }
 
-        $server->on('request', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) use ($handler, $hasSseInterface): void {
+        $server->on('request', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) use ($handler): void {
             try {
                 $psrRequest = $this->requestConverter->toServerRequest($swooleRequest);
 
-                if ($hasSseInterface && str_contains($psrRequest->getHeaderLine('accept'), 'text/event-stream')) {
-                    assert($handler instanceof SseHandlerInterface);
-
+                if ($handler instanceof SseHandlerInterface && str_contains($psrRequest->getHeaderLine('accept'), 'text/event-stream')) {
                     $headersSet = false;
                     $handled = $handler->handleSse(
                         $psrRequest,
@@ -240,7 +235,15 @@ final class SwooleServer
         };
 
         $this->onMessageCallbacks[] = static function (WebSocketServer $ws, SwooleFrame $frame) use ($handler): void {
-            $handler->handleWsMessage($frame->fd, $frame->data, $frame->opcode);
+            $fd = $frame->fd;
+            $data = $frame->data;
+            $opcode = $frame->opcode;
+
+            if (!is_int($fd) || !is_string($data) || !is_int($opcode)) {
+                return;
+            }
+
+            $handler->handleWsMessage($fd, $data, $opcode);
         };
 
         $this->onCloseCallbacks[] = static function (Server $server, int $fd) use ($handler): void {

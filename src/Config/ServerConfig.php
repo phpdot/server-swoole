@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace PHPdot\Server\Swoole\Config;
 
+use PHPdot\Container\Attribute\Config;
+
 /**
  * ServerConfig.
  *
@@ -11,9 +13,13 @@ namespace PHPdot\Server\Swoole\Config;
  * All properties are readonly and set via the constructor.
  * Use toArray() to build the settings array for Swoole's Server::set().
  *
+ * Auto-bound by phpdot/config when phpdot/package is installed: the user
+ * edits config/server.php; the DTO is hydrated from that file.
+ *
  * @author Omar Hamdan <omar@phpdot.com>
  * @license MIT
  */
+#[Config('server')]
 final class ServerConfig
 {
     /**
