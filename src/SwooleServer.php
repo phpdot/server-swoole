@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace PHPdot\Server\Swoole;
 
 use Closure;
+use PHPdot\Contracts\Server\ServerInterface;
 use PHPdot\Contracts\Server\SseHandlerInterface;
 use PHPdot\Contracts\Server\WebSocketHandlerInterface;
 use PHPdot\Server\Swoole\Config\ServerConfig;
@@ -31,10 +32,13 @@ use Swoole\WebSocket\Server as WebSocketServer;
  * to all Swoole server features: event callbacks, WebSocket push,
  * task dispatch, timers, and server lifecycle management.
  *
+ * Implements the shared ServerInterface, so an application can type-hint
+ * ServerInterface and swap between this and phpdot/server-sapi's SapiServer.
+ *
  * @author Omar Hamdan <omar@phpdot.com>
  * @license MIT
  */
-final class SwooleServer
+final class SwooleServer implements ServerInterface
 {
     /** @var RequestConverter Converts Swoole requests to PSR-7 */
     private readonly RequestConverter $requestConverter;
