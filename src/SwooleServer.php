@@ -132,7 +132,7 @@ final class SwooleServer implements ServerInterface
             $httpFactory,
             $httpFactory,
         );
-        $this->responseConverter = new ResponseConverter();
+        $this->responseConverter = new ResponseConverter(serverSoftware: $this->config->serverSoftware);
     }
 
     /**

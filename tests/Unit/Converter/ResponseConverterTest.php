@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace PHPdot\Server\Swoole\Tests\Unit\Converter;
 
+use Nyholm\Psr7\Factory\Psr17Factory;
 use PHPdot\Server\Swoole\Converter\ResponseConverter;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psr\Http\Message\ResponseInterface;
+use Swoole\Http\Response as SwooleResponse;
 
 final class ResponseConverterTest extends TestCase
 {
@@ -163,5 +166,59 @@ final class ResponseConverterTest extends TestCase
         self::assertFalse($result['httpOnly']);
         self::assertSame('', $result['sameSite']);
         self::assertFalse($result['partitioned']);
+    }
+
+    #[Test]
+    public function appliesServerSoftwareWhenResponseHasNoServerHeader(): void
+    {
+        $converter = new ResponseConverter(serverSoftware: 'PHPdot Server');
+        $response = (new Psr17Factory())->createResponse(200);
+
+        $captured = $this->captureHeaders($converter, $response);
+
+        self::assertSame('PHPdot Server', $captured['Server'] ?? null);
+    }
+
+    #[Test]
+    public function keepsResponseServerHeaderOverConfiguredDefault(): void
+    {
+        $converter = new ResponseConverter(serverSoftware: 'PHPdot Server');
+        $response = (new Psr17Factory())->createResponse(200)->withHeader('Server', 'Custom/1.0');
+
+        $captured = $this->captureHeaders($converter, $response);
+
+        self::assertSame('Custom/1.0', $captured['Server'] ?? null);
+    }
+
+    #[Test]
+    public function appliesNoServerHeaderWhenSoftwareIsEmpty(): void
+    {
+        $converter = new ResponseConverter(serverSoftware: '');
+        $response = (new Psr17Factory())->createResponse(200);
+
+        $captured = $this->captureHeaders($converter, $response);
+
+        self::assertArrayNotHasKey('Server', $captured);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function captureHeaders(ResponseConverter $converter, ResponseInterface $response): array
+    {
+        $captured = [];
+
+        $swoole = $this->createMock(SwooleResponse::class);
+        $swoole->method('header')->willReturnCallback(
+            function (string $name, string $value) use (&$captured): bool {
+                $captured[$name] = $value;
+
+                return true;
+            },
+        );
+
+        $converter->toSwoole($response, $swoole);
+
+        return $captured;
     }
 }

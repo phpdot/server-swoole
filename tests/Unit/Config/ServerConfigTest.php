@@ -17,6 +17,7 @@ final class ServerConfigTest extends TestCase
 
         self::assertSame('0.0.0.0', $config->host);
         self::assertSame(8080, $config->port);
+        self::assertSame('PHPdot Server', $config->serverSoftware);
         self::assertNull($config->workerNum);
         self::assertSame(0, $config->taskWorkerNum);
         self::assertSame(100000, $config->maxRequest);

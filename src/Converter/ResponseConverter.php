@@ -24,9 +24,11 @@ final class ResponseConverter
      * Create a new ResponseConverter.
      *
      * @param int $chunkSize Maximum chunk size in bytes for large responses
+     * @param string $serverSoftware Default HTTP "Server" header, applied when the response sets none (empty = leave Swoole's default)
      */
     public function __construct(
         private readonly int $chunkSize = 1048576,
+        private readonly string $serverSoftware = '',
     ) {}
 
     /**
@@ -69,6 +71,10 @@ final class ResponseConverter
                 continue;
             }
             $swooleResponse->header($name, implode(', ', $values));
+        }
+
+        if ($this->serverSoftware !== '' && !$psrResponse->hasHeader('Server')) {
+            $swooleResponse->header('Server', $this->serverSoftware);
         }
 
         $this->emitCookies($psrResponse, $swooleResponse);

@@ -25,6 +25,7 @@ final class ServerConfig
     /**
      * @param string $host Host address to bind to (IP or unix socket path)
      * @param int $port Port number to listen on
+     * @param string $serverSoftware Value for the HTTP "Server" response header (empty = keep Swoole's default)
      * @param int|null $workerNum Worker count (null = swoole_cpu_num())
      * @param int $taskWorkerNum Task worker count
      * @param int $maxRequest Max requests per worker before restart
@@ -69,6 +70,7 @@ final class ServerConfig
     public function __construct(
         public readonly string $host = '0.0.0.0',
         public readonly int $port = 8080,
+        public readonly string $serverSoftware = 'PHPdot Server',
         public readonly int|null $workerNum = null,
         public readonly int $taskWorkerNum = 0,
         public readonly int $maxRequest = 100000,
@@ -112,8 +114,8 @@ final class ServerConfig
      * Typed settings override raw settings. Only includes non-empty
      * optional string values. Uses swoole_cpu_num() when workerNum is null.
      *
-     * Excludes host, port, mode and sockType: those are constructor
-     * arguments to Swoole\Http\Server, not Server::set() options.
+     * Excludes host, port, serverSoftware, mode and sockType: those are not
+     * Server::set() options (serverSoftware is applied per response).
      *
      * @return array<string, mixed>
      */
