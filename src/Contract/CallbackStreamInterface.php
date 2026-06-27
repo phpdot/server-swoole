@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace PHPdot\Server\Swoole;
+namespace PHPdot\Server\Swoole\Contract;
 
 use Closure;
 

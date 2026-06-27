@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace PHPdot\Server\Swoole\Converter;
 
-use PHPdot\Server\Swoole\CallbackStreamInterface;
+use PHPdot\Server\Swoole\Contract\CallbackStreamInterface;
 use Psr\Http\Message\ResponseInterface;
 use Swoole\Http\Response as SwooleResponse;
 

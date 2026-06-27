@@ -11,9 +11,22 @@ use PHPdot\Contracts\Server\ServerInterface;
 use PHPdot\Contracts\Server\SseHandlerInterface;
 use PHPdot\Contracts\Server\WebSocketHandlerInterface;
 use PHPdot\Server\Swoole\Config\ServerConfig;
+use PHPdot\Server\Swoole\Contract\Event\OnAfterReloadInterface;
+use PHPdot\Server\Swoole\Contract\Event\OnBeforeReloadInterface;
+use PHPdot\Server\Swoole\Contract\Event\OnBeforeShutdownInterface;
+use PHPdot\Server\Swoole\Contract\Event\OnManagerStartInterface;
+use PHPdot\Server\Swoole\Contract\Event\OnManagerStopInterface;
+use PHPdot\Server\Swoole\Contract\Event\OnShutdownInterface;
+use PHPdot\Server\Swoole\Contract\Event\OnStartInterface;
+use PHPdot\Server\Swoole\Contract\Event\OnWorkerErrorInterface;
+use PHPdot\Server\Swoole\Contract\Event\OnWorkerExitInterface;
+use PHPdot\Server\Swoole\Contract\Event\OnWorkerStartInterface;
+use PHPdot\Server\Swoole\Contract\Event\OnWorkerStopInterface;
+use PHPdot\Server\Swoole\Contract\WatcherInterface;
 use PHPdot\Server\Swoole\Converter\RequestConverter;
 use PHPdot\Server\Swoole\Converter\ResponseConverter;
 use PHPdot\Server\Swoole\Exception\ServerException;
+use PHPdot\Server\Swoole\Watch\FileWatcher;
 use Psr\Http\Message\ServerRequestFactoryInterface;
 use Psr\Http\Message\StreamFactoryInterface;
 use Psr\Http\Message\UploadedFileFactoryInterface;
@@ -759,6 +772,94 @@ final class SwooleServer implements ServerInterface
     public function addProcess(Closure $handler): void
     {
         $this->userProcessHandlers[] = $handler;
+    }
+
+    /**
+     * Attach the development file watcher as a user process: it reloads workers
+     * on app-code changes and prints a restart notice for code loaded before the
+     * fork. Must be called before serve(). Development only — never in production.
+     */
+    public function watch(WatcherInterface $watcher): void
+    {
+        $fileWatcher = new FileWatcher($watcher);
+
+        $this->addProcess(function () use ($fileWatcher): void {
+            $fileWatcher->run($this);
+        });
+    }
+
+    /**
+     * Attach a lifecycle listener: each Contract\Event interface it implements is
+     * wired onto the matching server event, receiving this server. Call before
+     * serve(); listeners stack, so the framework's and the app's coexist.
+     */
+    public function subscribe(object $listener): void
+    {
+        if ($listener instanceof OnStartInterface) {
+            $this->onStart(function () use ($listener): void {
+                $listener->onStart($this);
+            });
+        }
+
+        if ($listener instanceof OnWorkerStartInterface) {
+            $this->onWorkerStart(function (\Swoole\Server $server, int $workerId) use ($listener): void {
+                $listener->onWorkerStart($this, $workerId);
+            });
+        }
+
+        if ($listener instanceof OnWorkerStopInterface) {
+            $this->onWorkerStop(function (\Swoole\Server $server, int $workerId) use ($listener): void {
+                $listener->onWorkerStop($this, $workerId);
+            });
+        }
+
+        if ($listener instanceof OnShutdownInterface) {
+            $this->onShutdown(function () use ($listener): void {
+                $listener->onShutdown($this);
+            });
+        }
+
+        if ($listener instanceof OnBeforeReloadInterface) {
+            $this->onBeforeReload(function () use ($listener): void {
+                $listener->onBeforeReload($this);
+            });
+        }
+
+        if ($listener instanceof OnAfterReloadInterface) {
+            $this->onAfterReload(function () use ($listener): void {
+                $listener->onAfterReload($this);
+            });
+        }
+
+        if ($listener instanceof OnManagerStartInterface) {
+            $this->onManagerStart(function () use ($listener): void {
+                $listener->onManagerStart($this);
+            });
+        }
+
+        if ($listener instanceof OnManagerStopInterface) {
+            $this->onManagerStop(function () use ($listener): void {
+                $listener->onManagerStop($this);
+            });
+        }
+
+        if ($listener instanceof OnWorkerExitInterface) {
+            $this->onWorkerExit(function (\Swoole\Server $server, int $workerId) use ($listener): void {
+                $listener->onWorkerExit($this, $workerId);
+            });
+        }
+
+        if ($listener instanceof OnWorkerErrorInterface) {
+            $this->onWorkerError(function (\Swoole\Server $server, int $workerId, int $workerPid, int $exitCode, int $signal) use ($listener): void {
+                $listener->onWorkerError($this, $workerId, $workerPid, $exitCode, $signal);
+            });
+        }
+
+        if ($listener instanceof OnBeforeShutdownInterface) {
+            $this->onBeforeShutdown(function () use ($listener): void {
+                $listener->onBeforeShutdown($this);
+            });
+        }
     }
 
     /**

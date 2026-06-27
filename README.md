@@ -300,7 +300,7 @@ $swoole->addProcess(new Process(function () { /* ... */ }));
 For real-time streaming (SSE, chunked responses), implement `CallbackStreamInterface`:
 
 ```php
-use PHPdot\Server\Swoole\CallbackStreamInterface;
+use PHPdot\Server\Swoole\Contract\CallbackStreamInterface;
 
 final class SseStream implements StreamInterface, CallbackStreamInterface
 {
@@ -384,19 +384,79 @@ $server->serve($handler);
 
 ---
 
+## Development hot reload
+
+Swoole keeps code resident, so edits don't apply until the workers reload — and `reload()` only reloads code loaded **after** the worker fork (master/bootstrap code needs a full restart). The watcher makes that split explicit.
+
+Build a `Watcher` and hand it to `watch()` before `serve()`. With no arguments it watches the current working directory, skips `vendor`/`.git`, and reloads on `.php` changes — narrow it with the constructor (typically wired from your CLI `--watch` flags):
+
+```php
+use PHPdot\Server\Swoole\Watch\Watcher;
+
+$server->watch(new Watcher(
+    paths: ['/app/src'],          // empty = current working directory
+    extensions: ['php', 'twig'],  // empty = ['php']
+    excludes: ['vendor', '.git'], // empty = ['vendor', '.git']
+    restart: ['config'],          // path segments that need a full restart, not a reload
+));
+$server->serve($handler);
+```
+
+On change the watcher reloads workers (`[watch] reloaded: ...`), except files matching a `restart` segment — those load before the fork, so they only get a notice (`[watch] restart required: ...`) and the full restart is yours to do. Development only — never attach it in production.
+
+For rules a flag can't express, implement `WatcherInterface` and pass it to `watch()`; `Watcher` is just the default implementation.
+
+## Lifecycle listeners
+
+Hook the server lifecycle with classes, not closures. Implement any of the `Contract\Event\*` interfaces and hand the listener to `subscribe()` before `serve()` — each interface it implements is wired onto the matching event:
+
+```php
+use PHPdot\Server\Swoole\Contract\Event\OnWorkerStartInterface;
+use PHPdot\Server\Swoole\Contract\Event\OnShutdownInterface;
+use PHPdot\Server\Swoole\SwooleServer;
+
+final class ServerKernel implements OnWorkerStartInterface, OnShutdownInterface
+{
+    public function onWorkerStart(SwooleServer $server, int $workerId): void
+    {
+        // runs on every worker (re)start — including after a reload.
+        // the place for opcache_reset(), cache warming, connection setup.
+    }
+
+    public function onShutdown(SwooleServer $server): void
+    {
+        // master shutting down — flush and clean up.
+    }
+}
+
+$server->subscribe(new ServerKernel());
+$server->serve($handler);
+```
+
+Implement only the events you need — each lifecycle event is its own small interface: `OnStartInterface`, `OnManagerStartInterface`, `OnManagerStopInterface`, `OnWorkerStartInterface`, `OnWorkerStopInterface`, `OnWorkerExitInterface`, `OnWorkerErrorInterface`, `OnBeforeReloadInterface`, `OnAfterReloadInterface`, `OnBeforeShutdownInterface`, `OnShutdownInterface`. Listeners stack, so the framework's callbacks and yours coexist.
+
+The I/O events (`onMessage`, `onOpen`, `onTask`, `onConnect`, …) are deliberately **not** listeners — they belong to the handler (`WebSocketHandlerInterface`, the task handler), not the lifecycle.
+
 ## Package Structure
 
 ```
 src/
   SwooleServer.php                Main entry point -- events, active methods, lifecycle
-  CallbackStreamInterface.php     Streaming contract
   Config/
     ServerConfig.php              Readonly server configuration
+  Contract/
+    CallbackStreamInterface.php   Streaming contract
+    WatcherInterface.php          Dev file-watch policy (paths, extensions, depth, classify)
   Converter/
     RequestConverter.php          Swoole -> PSR-7
     ResponseConverter.php         PSR-7 -> Swoole
+  Enum/
+    WatchAction.php               Reload | Restart | Ignore
   Exception/
     ServerException.php           Server errors
+  Watch/
+    FileWatcher.php               Polling hot-reload engine
+    Watcher.php                   Configurable WatcherInterface (built from watch flags)
 ```
 
 ## PSR Standards

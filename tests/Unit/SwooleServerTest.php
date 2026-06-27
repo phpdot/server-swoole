@@ -6,10 +6,22 @@ namespace PHPdot\Server\Swoole\Tests\Unit;
 
 use Nyholm\Psr7\Factory\Psr17Factory;
 use PHPdot\Server\Swoole\Config\ServerConfig;
+use PHPdot\Server\Swoole\Contract\Event\OnAfterReloadInterface;
+use PHPdot\Server\Swoole\Contract\Event\OnBeforeReloadInterface;
+use PHPdot\Server\Swoole\Contract\Event\OnBeforeShutdownInterface;
+use PHPdot\Server\Swoole\Contract\Event\OnManagerStartInterface;
+use PHPdot\Server\Swoole\Contract\Event\OnManagerStopInterface;
+use PHPdot\Server\Swoole\Contract\Event\OnShutdownInterface;
+use PHPdot\Server\Swoole\Contract\Event\OnStartInterface;
+use PHPdot\Server\Swoole\Contract\Event\OnWorkerErrorInterface;
+use PHPdot\Server\Swoole\Contract\Event\OnWorkerExitInterface;
+use PHPdot\Server\Swoole\Contract\Event\OnWorkerStartInterface;
+use PHPdot\Server\Swoole\Contract\Event\OnWorkerStopInterface;
 use PHPdot\Server\Swoole\Exception\ServerException;
 use PHPdot\Server\Swoole\SwooleServer;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use ReflectionProperty;
 
 final class SwooleServerTest extends TestCase
 {
@@ -208,6 +220,90 @@ final class SwooleServerTest extends TestCase
         $this->server->onWorkerStart(static function (): void {});
 
         self::assertTrue(true);
+    }
+
+    #[Test]
+    public function subscribeRoutesEveryLifecycleInterfaceToItsEvent(): void
+    {
+        $this->server->subscribe(new class implements OnStartInterface, OnManagerStartInterface, OnManagerStopInterface, OnWorkerStartInterface, OnWorkerStopInterface, OnWorkerExitInterface, OnWorkerErrorInterface, OnBeforeReloadInterface, OnAfterReloadInterface, OnBeforeShutdownInterface, OnShutdownInterface {
+            public function onStart(SwooleServer $server): void {}
+
+            public function onManagerStart(SwooleServer $server): void {}
+
+            public function onManagerStop(SwooleServer $server): void {}
+
+            public function onWorkerStart(SwooleServer $server, int $workerId): void {}
+
+            public function onWorkerStop(SwooleServer $server, int $workerId): void {}
+
+            public function onWorkerExit(SwooleServer $server, int $workerId): void {}
+
+            public function onWorkerError(SwooleServer $server, int $workerId, int $workerPid, int $exitCode, int $signal): void {}
+
+            public function onBeforeReload(SwooleServer $server): void {}
+
+            public function onAfterReload(SwooleServer $server): void {}
+
+            public function onBeforeShutdown(SwooleServer $server): void {}
+
+            public function onShutdown(SwooleServer $server): void {}
+        });
+
+        foreach ([
+            'onStartCallbacks',
+            'onManagerStartCallbacks',
+            'onManagerStopCallbacks',
+            'onWorkerStartCallbacks',
+            'onWorkerStopCallbacks',
+            'onWorkerExitCallbacks',
+            'onWorkerErrorCallbacks',
+            'onBeforeReloadCallbacks',
+            'onAfterReloadCallbacks',
+            'onBeforeShutdownCallbacks',
+            'onShutdownCallbacks',
+        ] as $event) {
+            self::assertCount(1, $this->callbacks($event), $event);
+        }
+
+        foreach ([
+            'onConnectCallbacks',
+            'onCloseCallbacks',
+            'onTaskCallbacks',
+            'onFinishCallbacks',
+            'onPipeMessageCallbacks',
+            'onOpenCallbacks',
+            'onMessageCallbacks',
+            'onHandshakeCallbacks',
+            'onDisconnectCallbacks',
+        ] as $event) {
+            self::assertCount(0, $this->callbacks($event), $event);
+        }
+    }
+
+    #[Test]
+    public function subscribeRegistersOnlyTheImplementedEvents(): void
+    {
+        $this->server->subscribe(new class implements OnWorkerStartInterface, OnShutdownInterface {
+            public function onWorkerStart(SwooleServer $server, int $workerId): void {}
+
+            public function onShutdown(SwooleServer $server): void {}
+        });
+
+        self::assertCount(1, $this->callbacks('onWorkerStartCallbacks'));
+        self::assertCount(1, $this->callbacks('onShutdownCallbacks'));
+        self::assertCount(0, $this->callbacks('onStartCallbacks'));
+        self::assertCount(0, $this->callbacks('onBeforeReloadCallbacks'));
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    private function callbacks(string $property): array
+    {
+        /** @var list<mixed> $value */
+        $value = (new ReflectionProperty(SwooleServer::class, $property))->getValue($this->server);
+
+        return $value;
     }
 
     #[Test]

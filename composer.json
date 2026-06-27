@@ -25,7 +25,7 @@
         "phpstan/phpstan": "^2.0",
         "phpstan/phpstan-strict-rules": "^2.0",
         "phpunit/phpunit": "^11.0",
-        "swoole/ide-helper": "*"
+        "swoole/ide-helper": "^6.0"
     },
     "suggest": {
         "phpdot/container": "Required for the framework's manifest scanner to auto-wire ServerConfig from config/server.php via the #[Config] attribute. The attribute is inert at runtime; standalone consumers don't need it installed.",
