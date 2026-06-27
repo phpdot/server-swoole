@@ -18,10 +18,10 @@ use PHPdot\Server\Swoole\SwooleServer;
 use PHPdot\Server\Swoole\Config\ServerConfig;
 
 $factory = new Psr17Factory();
-$config = new ServerConfig(workerNum: 4);
+$config = new ServerConfig(host: '0.0.0.0', port: 8080, workerNum: 4);
 
 $server = new SwooleServer($factory, $config);
-$server->serve($handler, '0.0.0.0', 8080);
+$server->serve($handler);
 ```
 
 `$handler` is any PSR-15 `RequestHandlerInterface` -- your router, your framework, your middleware pipeline.
@@ -58,13 +58,14 @@ $config = new ServerConfig(
 
 ```php
 $config = new ServerConfig(
+    port: 443,
     sockType: SWOOLE_SOCK_TCP | SWOOLE_SSL,
     sslCertFile: '/etc/ssl/certs/app.pem',
     sslKeyFile: '/etc/ssl/private/app.key',
     http2: true,
 );
 
-$server->serve($handler, '0.0.0.0', 443);
+$server->serve($handler);
 ```
 
 ### Static Files
@@ -194,7 +195,7 @@ $server->onClose(function (Server $server, int $fd): void {
     echo "Client disconnected: {$fd}\n";
 });
 
-$server->serve($handler, '0.0.0.0', 8080);
+$server->serve($handler);
 ```
 
 ### Active WebSocket Methods
@@ -354,6 +355,8 @@ The `ResponseConverter` selects the optimal strategy for each response:
 
 ```php
 $config = new ServerConfig(
+    host: '0.0.0.0',
+    port: 443,
     workerNum: 8,
     taskWorkerNum: 2,
     maxRequest: 100000,
@@ -376,7 +379,7 @@ $server->onWorkerStart(function (Server $server, int $workerId): void {
     cli_set_process_title("app: worker {$workerId}");
 });
 
-$server->serve($handler, '0.0.0.0', 443);
+$server->serve($handler);
 ```
 
 ---

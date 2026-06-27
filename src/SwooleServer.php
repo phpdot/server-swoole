@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace PHPdot\Server\Swoole;
 
 use Closure;
+use PHPdot\Container\Attribute\Binds;
+use PHPdot\Container\Attribute\Singleton;
 use PHPdot\Contracts\Server\ServerInterface;
 use PHPdot\Contracts\Server\SseHandlerInterface;
 use PHPdot\Contracts\Server\WebSocketHandlerInterface;
@@ -38,6 +40,8 @@ use Swoole\WebSocket\Server as WebSocketServer;
  * @author Omar Hamdan <omar@phpdot.com>
  * @license MIT
  */
+#[Singleton]
+#[Binds(ServerInterface::class)]
 final class SwooleServer implements ServerInterface
 {
     /** @var RequestConverter Converts Swoole requests to PSR-7 */
@@ -137,16 +141,13 @@ final class SwooleServer implements ServerInterface
      * Automatically uses WebSocket\Server when WebSocket callbacks are
      * registered. This method blocks until the server is shut down.
      *
+     * The bind address comes from ServerConfig (host/port).
+     *
      * @param RequestHandlerInterface $handler PSR-15 request handler
-     * @param string $host Host address to bind to
-     * @param int $port Port number to listen on
      * @throws ServerException If WebSocket callbacks are registered without onMessage
      */
-    public function serve(
-        RequestHandlerInterface $handler,
-        string $host = '0.0.0.0',
-        int $port = 8080,
-    ): void {
+    public function serve(RequestHandlerInterface $handler): void
+    {
         if ($this->hasWebSocket() && $this->onMessageCallbacks === [] && !$handler instanceof WebSocketHandlerInterface) {
             throw new ServerException(
                 'WebSocket callbacks registered but onMessage is missing. Swoole requires onMessage for WebSocket servers.',
@@ -157,7 +158,7 @@ final class SwooleServer implements ServerInterface
             $this->registerWsHandler($handler);
         }
 
-        $server = $this->createServer($host, $port);
+        $server = $this->createServer($this->config->host, $this->config->port);
         $server->set($this->config->toArray());
 
         $this->registerCallbacks($server);

@@ -15,6 +15,8 @@ final class ServerConfigTest extends TestCase
     {
         $config = new ServerConfig();
 
+        self::assertSame('0.0.0.0', $config->host);
+        self::assertSame(8080, $config->port);
         self::assertNull($config->workerNum);
         self::assertSame(0, $config->taskWorkerNum);
         self::assertSame(100000, $config->maxRequest);
@@ -115,6 +117,25 @@ final class ServerConfigTest extends TestCase
         self::assertSame(20, $array['http_compression_min_length']);
         self::assertSame(1, $array['http_compression_level']);
         self::assertSame('/tmp', $array['upload_tmp_dir']);
+    }
+
+    #[Test]
+    public function customHostAndPortViaNamedParams(): void
+    {
+        $config = new ServerConfig(host: '127.0.0.1', port: 9501);
+
+        self::assertSame('127.0.0.1', $config->host);
+        self::assertSame(9501, $config->port);
+    }
+
+    #[Test]
+    public function toArrayExcludesHostAndPort(): void
+    {
+        $config = new ServerConfig(host: '127.0.0.1', port: 9501);
+        $array = $config->toArray();
+
+        self::assertArrayNotHasKey('host', $array);
+        self::assertArrayNotHasKey('port', $array);
     }
 
     #[Test]
