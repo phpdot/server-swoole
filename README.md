@@ -447,6 +447,7 @@ src/
   Contract/
     CallbackStreamInterface.php   Streaming contract
     WatcherInterface.php          Dev file-watch policy (paths, extensions, depth, classify)
+    Event/                        11 lifecycle listener interfaces (OnStart, OnWorkerStart, OnShutdown, ...)
   Converter/
     RequestConverter.php          Swoole -> PSR-7
     ResponseConverter.php         PSR-7 -> Swoole
