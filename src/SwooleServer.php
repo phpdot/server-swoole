@@ -174,15 +174,31 @@ final class SwooleServer implements ServerInterface
         $server = $this->createServer($this->config->host, $this->config->port);
         $server->set($this->config->toArray());
 
-        // Graceful shutdown on Ctrl+C. Swoole's master honours SIGTERM but drops
-        // SIGINT, so without this the server ignores Ctrl+C and lingers in the
-        // background. Registered in the master (onStart), where shutdown() tears
-        // down the workers, the manager, and user processes (the watcher included).
+        // Shut down cleanly however the server was launched. Swoole's master
+        // honours SIGTERM but drops SIGINT, and under a wrapper like `composer
+        // watch` Ctrl+C hits the wrapper's process group, not the master's — so
+        // the master would orphan and keep the port. Two safety nets in the
+        // master (onStart): handle SIGINT directly, and poll for the launching
+        // parent disappearing (orphaned to init). shutdown() tears down the
+        // workers, the manager, and user processes (the watcher included).
+        $launchParentPid = function_exists('posix_getppid') ? posix_getppid() : 0;
+
         $this->onStart(static function () use ($server): void {
             \Swoole\Process::signal(SIGINT, static function () use ($server): void {
                 $server->shutdown();
             });
         });
+
+        if ($launchParentPid > 1) {
+            $this->onStart(static function () use ($server, $launchParentPid): void {
+                \Swoole\Timer::tick(1000, static function (int $timerId) use ($server, $launchParentPid): void {
+                    if (posix_getppid() !== $launchParentPid) {
+                        \Swoole\Timer::clear($timerId);
+                        $server->shutdown();
+                    }
+                });
+            });
+        }
 
         $this->registerCallbacks($server);
 
