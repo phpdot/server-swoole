@@ -32,19 +32,21 @@ final class FileWatcher
     ) {}
 
     /**
-     * Run the poll loop. Blocks until stop() (e.g. on SIGTERM) or the process is
-     * killed by the Swoole master.
+     * Run the poll loop. Blocks until stop() is called or — the normal case —
+     * the Swoole master terminates this user process on server shutdown.
      */
     public function run(SwooleServer $server): void
     {
-        Process::signal(SIGTERM, function (): void {
-            $this->stop();
-        });
-
+        $masterPid = $server->getMasterPid();
         $previous = $this->snapshot();
 
         while ($this->running) {
             Coroutine::sleep($this->watcher->interval());
+
+            // Exit if the server is gone, so this user process never orphans.
+            if ($masterPid > 0 && Process::kill($masterPid, 0) === false) {
+                break;
+            }
 
             $plan = $this->plan($previous);
 
