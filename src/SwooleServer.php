@@ -174,46 +174,16 @@ final class SwooleServer implements ServerInterface
         $server = $this->createServer($this->config->host, $this->config->port);
         $server->set($this->config->toArray());
 
-        // Shut down cleanly however the server was launched. Swoole's master
-        // honours SIGTERM but drops SIGINT, and under a wrapper like `composer
-        // watch` Ctrl+C hits the wrapper's process group, not the master's — so
-        // the master would orphan and keep the port. Two safety nets in the
-        // master (onStart): handle SIGINT directly, and poll for the launching
-        // parent disappearing (orphaned to init). shutdown() tears down the
-        // workers, the manager, and user processes (the watcher included).
-        $launchParentPid = function_exists('posix_getppid') ? posix_getppid() : 0;
-        $pollTimerId = -1;
-
+        // Graceful shutdown on Ctrl+C. Swoole's master honours SIGTERM but drops
+        // SIGINT, so install a SIGINT handler in the master that calls shutdown()
+        // — the coordinated teardown of the workers, the manager, and the master.
+        // Run the dev server in the foreground (`php dot server:start`, not via a
+        // composer-script wrapper) so Ctrl+C reaches the master directly.
         $this->onStart(static function () use ($server): void {
             \Swoole\Process::signal(SIGINT, static function () use ($server): void {
                 $server->shutdown();
             });
         });
-
-        if ($launchParentPid > 1) {
-            $this->onStart(static function () use ($server, $launchParentPid, &$pollTimerId): void {
-                $timerId = \Swoole\Timer::tick(1000, static function (int $timerId) use ($server, $launchParentPid): void {
-                    if (posix_getppid() !== $launchParentPid) {
-                        \Swoole\Timer::clear($timerId);
-                        $server->shutdown();
-                    }
-                });
-
-                if ($timerId !== false) {
-                    $pollTimerId = $timerId;
-                }
-            });
-
-            // The poll timer keeps the master's reactor alive. Clear it as the
-            // server shuts down (SIGINT/SIGTERM/shutdown()) so the master can
-            // actually exit instead of hanging with the reactor still running.
-            $this->onBeforeShutdown(static function () use (&$pollTimerId): void {
-                if ($pollTimerId >= 0) {
-                    \Swoole\Timer::clear($pollTimerId);
-                    $pollTimerId = -1;
-                }
-            });
-        }
 
         $this->registerCallbacks($server);
 
