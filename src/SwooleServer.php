@@ -174,6 +174,16 @@ final class SwooleServer implements ServerInterface
         $server = $this->createServer($this->config->host, $this->config->port);
         $server->set($this->config->toArray());
 
+        // Graceful shutdown on Ctrl+C. Swoole's master honours SIGTERM but drops
+        // SIGINT, so without this the server ignores Ctrl+C and lingers in the
+        // background. Registered in the master (onStart), where shutdown() tears
+        // down the workers, the manager, and user processes (the watcher included).
+        $this->onStart(static function () use ($server): void {
+            \Swoole\Process::signal(SIGINT, static function () use ($server): void {
+                $server->shutdown();
+            });
+        });
+
         $this->registerCallbacks($server);
 
         foreach ($this->userProcessHandlers as $processHandler) {
