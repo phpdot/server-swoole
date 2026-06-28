@@ -182,6 +182,7 @@ final class SwooleServer implements ServerInterface
         // parent disappearing (orphaned to init). shutdown() tears down the
         // workers, the manager, and user processes (the watcher included).
         $launchParentPid = function_exists('posix_getppid') ? posix_getppid() : 0;
+        $pollTimerId = -1;
 
         $this->onStart(static function () use ($server): void {
             \Swoole\Process::signal(SIGINT, static function () use ($server): void {
@@ -190,13 +191,27 @@ final class SwooleServer implements ServerInterface
         });
 
         if ($launchParentPid > 1) {
-            $this->onStart(static function () use ($server, $launchParentPid): void {
-                \Swoole\Timer::tick(1000, static function (int $timerId) use ($server, $launchParentPid): void {
+            $this->onStart(static function () use ($server, $launchParentPid, &$pollTimerId): void {
+                $timerId = \Swoole\Timer::tick(1000, static function (int $timerId) use ($server, $launchParentPid): void {
                     if (posix_getppid() !== $launchParentPid) {
                         \Swoole\Timer::clear($timerId);
                         $server->shutdown();
                     }
                 });
+
+                if ($timerId !== false) {
+                    $pollTimerId = $timerId;
+                }
+            });
+
+            // The poll timer keeps the master's reactor alive. Clear it as the
+            // server shuts down (SIGINT/SIGTERM/shutdown()) so the master can
+            // actually exit instead of hanging with the reactor still running.
+            $this->onBeforeShutdown(static function () use (&$pollTimerId): void {
+                if ($pollTimerId >= 0) {
+                    \Swoole\Timer::clear($pollTimerId);
+                    $pollTimerId = -1;
+                }
             });
         }
 
