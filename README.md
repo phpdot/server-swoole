@@ -8,7 +8,7 @@ Swoole HTTP/WebSocket server adapter for PSR-15. Framework-agnostic, standalone,
 composer require phpdot/server-swoole
 ```
 
-Requires `ext-swoole >= 6.0` and PHP 8.3+.
+Requires `ext-swoole >= 6.2` and PHP 8.4+.
 
 ## Quick Start
 
@@ -316,6 +316,12 @@ final class SseStream implements StreamInterface, CallbackStreamInterface
 ```
 
 The `ResponseConverter` detects this interface and streams each chunk directly via `$swooleResponse->write()` -- data reaches the client immediately without buffering.
+
+---
+
+## Error handling
+
+Handling application errors is your middleware's job, not the adapter's. If a handler throws and nothing catches it, the server sends a last-resort `500` carrying the exception message and keeps the worker alive — so for safe, consistent error responses, put error-handling middleware at the top of your PSR-15 stack (e.g. `phpdot/error-handler`) to catch exceptions before they reach the transport.
 
 ---
 
