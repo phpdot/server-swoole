@@ -185,6 +185,18 @@ final class SwooleServer implements ServerInterface
             });
         });
 
+        // Only the master may act on Ctrl+C. Pin the manager and workers to
+        // ignore SIGINT so a rapid/repeated terminal interrupt can't kill a child
+        // out of order mid-shutdown — which is what makes Swoole log "manager
+        // process exit" / "kill failed". The master handler above drives the one
+        // coordinated stop and tears the children down itself.
+        $this->onManagerStart(static function (): void {
+            \Swoole\Process::signal(SIGINT, static function (): void {});
+        });
+        $this->onWorkerStart(static function (): void {
+            \Swoole\Process::signal(SIGINT, static function (): void {});
+        });
+
         $this->registerCallbacks($server);
 
         foreach ($this->userProcessHandlers as $processHandler) {
@@ -192,6 +204,7 @@ final class SwooleServer implements ServerInterface
         }
 
         $server->on('request', function (SwooleRequest $swooleRequest, SwooleResponse $swooleResponse) use ($handler): void {
+            $started = false;
             try {
                 $psrRequest = $this->requestConverter->toServerRequest($swooleRequest);
 
@@ -199,7 +212,8 @@ final class SwooleServer implements ServerInterface
                     $headersSet = false;
                     $handled = $handler->handleSse(
                         $psrRequest,
-                        static function (string $data) use ($swooleResponse, &$headersSet): bool {
+                        static function (string $data) use ($swooleResponse, &$headersSet, &$started): bool {
+                            $started = true;
                             if (!$headersSet) {
                                 $swooleResponse->header('Content-Type', 'text/event-stream');
                                 $swooleResponse->header('Cache-Control', 'no-cache, no-transform');
@@ -224,10 +238,24 @@ final class SwooleServer implements ServerInterface
                 }
 
                 $psrResponse = $handler->handle($psrRequest);
-                $this->responseConverter->toSwoole($psrResponse, $swooleResponse);
+                $this->responseConverter->toSwoole(
+                    $psrResponse,
+                    $swooleResponse,
+                    $psrRequest->getMethod() === 'HEAD',
+                    $started,
+                );
             } catch (\Throwable $e) {
-                $swooleResponse->status(500);
-                $swooleResponse->end($e->getMessage());
+                if ($started) {
+                    // The body is already streaming: the status line is on the wire and cannot be
+                    // changed, and appending the error would corrupt the response. Abort the
+                    // connection so the client detects an incomplete response.
+                    if ($swooleResponse->isWritable()) {
+                        $swooleResponse->close();
+                    }
+                } else {
+                    $swooleResponse->status(500);
+                    $swooleResponse->end($e->getMessage());
+                }
             }
         });
 

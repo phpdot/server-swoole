@@ -37,6 +37,11 @@ final class FileWatcher
      */
     public function run(SwooleServer $server): void
     {
+        // Never act on Ctrl+C from this user process — only the master shuts the
+        // server down (and it tears this process down as part of that). Ignoring
+        // SIGINT keeps a terminal interrupt from killing the watcher out of order.
+        Process::signal(SIGINT, static function (): void {});
+
         $masterPid = $server->getMasterPid();
         $previous = $this->snapshot();
 

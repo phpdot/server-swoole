@@ -11,7 +11,7 @@
     ],
     "keywords": ["swoole", "http", "server", "psr-7", "psr-15", "async"],
     "require": {
-        "php": ">=8.3",
+        "php": ">=8.4",
         "ext-swoole": ">=6.2",
         "psr/http-message": "^2.0",
         "psr/http-factory": "^1.0",
@@ -29,7 +29,8 @@
     },
     "suggest": {
         "phpdot/container": "Required for the framework's manifest scanner to auto-wire ServerConfig from config/server.php via the #[Config] attribute. The attribute is inert at runtime; standalone consumers don't need it installed.",
-        "phpdot/container-swoole": "Provides SwooleContextProvider for per-coroutine isolation of Scoped services. Recommended for any phpdot app running under this server."
+        "phpdot/container-swoole": "Provides SwooleContextProvider for per-coroutine isolation of Scoped services. Recommended for any phpdot app running under this server.",
+        "phpdot/error-handler": "PSR-15 middleware that catches application exceptions and renders safe error responses. The server's last-resort handler passes the raw exception message through, so add this to your middleware stack to avoid leaking internal errors to clients."
     },
     "autoload": {
         "psr-4": {

@@ -41,9 +41,16 @@ final class ResponseConverter
      *
      * @param ResponseInterface $psrResponse The PSR-7 response to send
      * @param SwooleResponse $swooleResponse The Swoole response to write to
+     * @param bool $omitBody Emit status and headers only, no body (for HEAD requests)
+     * @param bool $started Set to true once the response body has begun streaming; lets the
+     *                      caller detect a mid-stream failure that can no longer change the status
      */
-    public function toSwoole(ResponseInterface $psrResponse, SwooleResponse $swooleResponse): void
-    {
+    public function toSwoole(
+        ResponseInterface $psrResponse,
+        SwooleResponse $swooleResponse,
+        bool $omitBody = false,
+        bool &$started = false,
+    ): void {
         $swooleResponse->status($psrResponse->getStatusCode(), $psrResponse->getReasonPhrase());
 
         $trailerNames = [];
@@ -54,7 +61,9 @@ final class ResponseConverter
             );
         }
 
-        $willStream = $this->willStream($psrResponse);
+        // A HEAD response streams no body, so keep Content-Length (it advertises the size a GET
+        // would return) rather than stripping it for chunked transfer.
+        $stripContentLength = !$omitBody && $this->willStream($psrResponse);
 
         foreach ($psrResponse->getHeaders() as $name => $values) {
             $lower = strtolower($name);
@@ -64,7 +73,7 @@ final class ResponseConverter
             if ($lower === 'transfer-encoding') {
                 continue;
             }
-            if ($lower === 'content-length' && $willStream) {
+            if ($lower === 'content-length' && $stripContentLength) {
                 continue;
             }
             if (in_array($lower, $trailerNames, true)) {
@@ -79,7 +88,15 @@ final class ResponseConverter
 
         $this->emitCookies($psrResponse, $swooleResponse);
         $this->emitTrailers($psrResponse, $swooleResponse, $trailerNames);
-        $this->emitBody($psrResponse, $swooleResponse);
+
+        // HEAD (RFC 7231): same status + headers as GET, but never a message body.
+        if ($omitBody) {
+            $swooleResponse->end();
+
+            return;
+        }
+
+        $this->emitBody($psrResponse, $swooleResponse, $started);
     }
 
     /**
@@ -248,14 +265,17 @@ final class ResponseConverter
      *
      * @param ResponseInterface $psrResponse The PSR-7 response
      * @param SwooleResponse $swooleResponse The Swoole response
+     * @param bool $started Set to true the moment a chunk is written, so a later failure is
+     *                      recognised as un-recoverable (status already on the wire)
      */
-    private function emitBody(ResponseInterface $psrResponse, SwooleResponse $swooleResponse): void
+    private function emitBody(ResponseInterface $psrResponse, SwooleResponse $swooleResponse, bool &$started): void
     {
         $body = $psrResponse->getBody();
 
         if ($body instanceof CallbackStreamInterface) {
             $callback = $body->getCallback();
-            $callback(static function (string $chunk) use ($swooleResponse): void {
+            $callback(static function (string $chunk) use ($swooleResponse, &$started): void {
+                $started = true;
                 $swooleResponse->write($chunk);
             });
             $swooleResponse->end();
@@ -298,7 +318,10 @@ final class ResponseConverter
             while (!$body->eof()) {
                 $chunk = $body->read($this->chunkSize);
                 if ($chunk !== '') {
-                    $swooleResponse->write($chunk);
+                    $started = true;
+                    if ($swooleResponse->write($chunk) === false) {
+                        break;
+                    }
                 }
             }
             $swooleResponse->end();
