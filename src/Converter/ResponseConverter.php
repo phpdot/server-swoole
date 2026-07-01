@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace PHPdot\Server\Swoole\Converter;
 
+use PHPdot\Http\Response\StreamedResponseInterface;
 use PHPdot\Server\Swoole\Contract\CallbackStreamInterface;
 use Psr\Http\Message\ResponseInterface;
 use Swoole\Http\Response as SwooleResponse;
@@ -192,6 +193,10 @@ final class ResponseConverter
      */
     private function willStream(ResponseInterface $psrResponse): bool
     {
+        if ($psrResponse instanceof StreamedResponseInterface) {
+            return true;
+        }
+
         $body = $psrResponse->getBody();
 
         if ($body instanceof CallbackStreamInterface) {
@@ -270,6 +275,20 @@ final class ResponseConverter
      */
     private function emitBody(ResponseInterface $psrResponse, SwooleResponse $swooleResponse, bool &$started): void
     {
+        // A StreamedResponse (phpdot/http) produces its body via a push callback — the single
+        // source of truth for streaming and SSE. Pump each chunk through Swoole's write();
+        // the writer returns false once the client disconnects, so producers can stop.
+        if ($psrResponse instanceof StreamedResponseInterface) {
+            $psrResponse->emit(static function (string $chunk) use ($swooleResponse, &$started): bool {
+                $started = true;
+
+                return $swooleResponse->write($chunk);
+            });
+            $swooleResponse->end();
+
+            return;
+        }
+
         $body = $psrResponse->getBody();
 
         if ($body instanceof CallbackStreamInterface) {

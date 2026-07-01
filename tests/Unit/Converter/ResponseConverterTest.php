@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace PHPdot\Server\Swoole\Tests\Unit\Converter;
 
 use Nyholm\Psr7\Factory\Psr17Factory;
+use PHPdot\Http\Factory\ResponseFactory;
 use PHPdot\Server\Swoole\Converter\ResponseConverter;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -199,6 +200,30 @@ final class ResponseConverterTest extends TestCase
         $captured = $this->captureHeaders($converter, $response);
 
         self::assertArrayNotHasKey('Server', $captured);
+    }
+
+    #[Test]
+    public function streamedResponseIsEmittedViaWrite(): void
+    {
+        $response = (new ResponseFactory())->stream(static function (callable $write): void {
+            $write('chunk-1');
+            $write('chunk-2');
+        }, 200, ['Content-Type' => 'text/plain']);
+
+        $chunks = [];
+        $swoole = $this->createMock(SwooleResponse::class);
+        $swoole->method('write')->willReturnCallback(
+            static function (string $chunk) use (&$chunks): bool {
+                $chunks[] = $chunk;
+
+                return true;
+            },
+        );
+        $swoole->expects(self::once())->method('end');
+
+        $this->converter->toSwoole($response, $swoole);
+
+        self::assertSame(['chunk-1', 'chunk-2'], $chunks);
     }
 
     /**
